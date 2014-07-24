@@ -209,6 +209,73 @@ You can export GNV_LINK_LIB_OVER_SHARED=1 to cause the LD command to look
 for a GNV$LIB<name>: logical name and if it exists will add it as a shared
 image, ignoring any lib<name>.a or lib<name>.olb files.
 
+Some examples:
+
+   Use a "prebuild" command procedure to set up the DCL symbols and
+   logical names for the compiler and linker.
+
+   Most open source projects need the CC options:
+       /names=(as_is,short)-
+       /main=posix_exit-
+       /float=IEEE/IEEE_MODE=DENORM_RESULTS
+
+   Building on a search list usually requires the CC option:
+       /nested=NONE.
+
+   So for cPython 3.5, I set: (wrapped line warning)
+
+   $ show sym cc
+      CC == "CC/STANDARD=(RELAXED,ISOC94)/ACCEPT=(NOVAXC,RESTR,C99)/LIST
+            /SHOW=(EXPAN,INCLU)/NAMES=(AS_IS,SHORT)/MAIN=POSIX_EXIT
+            /FLOAT=IEEE/IEEE_MODE=DENORM_RESULTS/NESTED=NONE"
+
+   The DECC$SYSTEM_INCLUDE and other logicals may also be needed.
+
+   $show log decc$*include/proc
+
+      "DECC$SYSTEM_INCLUDE" = "[.vms]"
+
+   The configure tests are typically run with out header files present,
+   and that means the VMS exit() behavior will be used.  The configure
+   tests need the posix_exit() instead.
+
+   Other things may be need on a per-project basis, and if you are
+   building extra libraries, you may have to put code there as stubs for
+   the routines configure tests so that configure believes that the
+   libraries already exist.
+
+   The configure tests typically do not know how to find the shared
+   images for the VMS versions of utilities.  These are fixed up
+   with the gnv$conftest.c_first and gnv$conftest.opt.  If you have
+   c++ code, you may need a gnv$conftest.cc_first to get the right results.
+
+   $ type gnv$conftest.*
+
+   LCL_ROOT:[cpython]gnv$conftest.c_first;1
+
+   void __posix_exit(int __status);
+   #define exit(__p1) __posix_exit(__p1)
+
+   /* Needed for stropts test */
+   #define u_short unsigned short
+   #define u_char unsigned char
+   #define u_long unsigned long
+
+   LCL_ROOT:[cpython]gnv$conftest.opt;1
+
+   gnv$libzshr/share
+
+   You will have to inspect the config.log and *config.h after running
+   configure to verify the results.  Contrary to the apparent goal,
+   the tests in configure are not properly testing what the programmer
+   is actually looking for, and many of the tests will always fail
+   on any platform with backwards binary compatibility, like commercial
+   operating systems.
+
+   With other platforms, these configure failures may not be noticed.
+   On VMS they will usually cause configure to try alternate options that
+   are even less likely to be supported.
+
 
 Fixes and enhancements:
 
