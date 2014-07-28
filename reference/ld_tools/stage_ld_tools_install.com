@@ -32,24 +32,24 @@ $!   create/dir new_gnu:[bin]/prot=o:rwed
 $   create/dir new_gnu:[vms_bin]/prot=o:rwed
 $!   create/dir new_gnu:[lib]/prot=o:rwed
 $   create/dir new_gnu:[usr.bin]/prot=o:rwed
-$!   create/dir new_gnu:[usr.share.doc.ld_tool]/prot=o:rwed
+$!   create/dir new_gnu:[usr.share.doc.ld_tools]/prot=o:rwed
 $!   create/dir new_gnu:[usr.share.info]/prot=o:rwed
 $!   create/dir new_gnu:[usr.share.doc.man.man1]/prot=o:rwed
 $ endif
 $!
 $ if mode .eqs. "install"
 $ then
-$    copy gnv_ld_tool_startup.com -
-         new_gnu:[vms_bin]gnv$ld_tool_startup.com
+$    copy gnv_ld_tools_startup.com -
+         new_gnu:[vms_bin]gnv$ld_tools_startup.com
 $ else
-$    file = "new_gnu:[vms_bin]gnv$ld_tool_startup.com"
+$    file = "new_gnu:[vms_bin]gnv$ld_tools_startup.com"
 $    if f$search(file) .nes. "" then delete 'file';*
 $ endif
 $!
 $!
 $!   Read through the file list to set up aliases and rename commands.
 $!---------------------------------------------------------------------
-$ open/read flst pcsi_ld_tool_file_list.txt
+$ open/read flst pcsi_ld_tools_file_list.txt
 $!
 $inst_alias_loop:
 $   ! Skip the aliases
@@ -89,8 +89,8 @@ $!
 $!   if p1 starts with "R" then remove instead of install.
 $!
 $!   If gnv$xxx.exe, then:
-$!       Source is []gnv$ld_tool.exe
-$!       Destination1 is new_gnu:[bin]gnv$ld_tool.exe
+$!       Source is []gnv$ld.exe
+$!       Destination1 is new_gnu:[bin]gnv$ld.exe
 $!       Destination2 is new_gnu:[bin]xxx.  (alias)
 $!       Destination2 is new_gnu:[bin]xxx.exe  (alias)
 $!       We put all in new_gnu:[bin] instead of some in [usr.bin] because
@@ -101,7 +101,7 @@ $   then
 $       myfile_len = f$length(tname)
 $       myfile = f$extract(4, myfile_len, tname)
 $       source = "[]gnv$''myfile'''ttype'"
-$       dest1 = "new_gnu:[bin]''tname'''ttype'"
+$       dest1 = "new_gnu:[usr.bin]''tname'''ttype'"
 $       dest2 = "new_gnu:[bin]''myfile'."
 $       dest3 = "new_gnu:[bin]''myfile'.exe"
 $       if mode .eqs. "install"
@@ -138,17 +138,17 @@ $       endif
 $       goto inst_file_loop
 $   endif
 $!
-$!   If doc.ld_tool] then
+$!   If doc.ld_tools] then
 $!       source is sys$disk:[] or [.readme_d]
-$!       dest is [usr.share.doc.ld_tool]
-$   if f$locate(".doc.ld_tool]", tdir) .lt. tdir_len
+$!       dest is [usr.share.doc.ld_tools]
+$   if f$locate(".doc.ld_tools]", tdir) .lt. tdir_len
 $   then
 $       source = "sys$disk:[]''tname'''ttype'"
 $       if f$search(source) .eqs. ""
 $       then
 $           source = "sys$disk:[]$''tname'''ttype'"
 $       endif
-$       dest = "new_gnu:[usr.share.doc.ld_tool]''tname'''ttype'"
+$       dest = "new_gnu:[usr.share.doc.ld_tools]''tname'''ttype'"
 $       if mode .eqs. "install"
 $       then
 $           if f$search(dest) .eqs. "" then copy 'source' 'dest'
@@ -159,7 +159,7 @@ $       goto inst_file_loop
 $   endif
 $!
 $!   If *.info then
-$!       source is [.doc]ld_tool.info
+$!       source is [.doc]ld_tools.info
 $!       dest is [.usr.share.info]
 $    if ttype .eqs. ".info"
 $    then
@@ -220,11 +220,11 @@ $ if mode .eqs. "install"
 $ then
 $   if f$search(file) .eqs. ""
 $   then
-$       set file/enter='file' new_gnu:[bin]gnv$ld.EXE
+$       set file/enter='file' new_gnu:[usr.bin]gnv$ld.EXE
 $   endif
 $   if f$search("''file'exe") .eqs. ""
 $   then
-$       set file/enter='file'exe new_gnu:[bin]gnv$ld.EXE
+$       set file/enter='file'exe new_gnu:[usr.bin]gnv$ld.EXE
 $   endif
 $ else
 $   if f$search(file) .nes. "" then set file/remove 'file';*
