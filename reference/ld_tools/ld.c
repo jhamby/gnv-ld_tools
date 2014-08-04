@@ -2202,15 +2202,17 @@ void do_outfile_cmdfile(FILE *fp, const char *action) {
     int path_len;
     char cmd_file[256];
     char * ext;
+    char * output_file;
     int acc_stat;
 
     if (outfile == NULL) {
 	return;
     }
-    path = dirname(outfile);
+    output_file = strdup(outfile);
+    path = dirname(output_file);
     path_len = strlen(path);
-    name = basename(outfile);
-    ext = strrchr(outfile, '.');
+    name = basename(output_file);
+    ext = strrchr(output_file, '.');
     if (ext == NULL) {
 	name_len = strlen(name);
     } else {
@@ -2228,6 +2230,7 @@ void do_outfile_cmdfile(FILE *fp, const char *action) {
     if (acc_stat == 0) {
 	fprintf(fp, "$@%s\n", unix_to_vms(cmd_file, FALSE));
     }
+    free(output_file);
 }
 
 /*
@@ -3188,7 +3191,8 @@ int main(int argc, char *argv[])
             is_cc = 1;
 	}
     }
-    if (strncasecmp(p, "cc", 2) == 0) {
+    if ((strncasecmp(p, "cc", 2) == 0) ||
+        (strncasecmp(p, "gcc", 3) == 0)) {
         is_cc = 1;
     }
     if (strncasecmp(p, "ld", 2) == 0) {
@@ -3253,17 +3257,26 @@ int main(int argc, char *argv[])
 		    if (equals) {
 			int def_len;
 			int cmd_len;
+			int quote_flag;
 			equals++;
 			cmd_len = strlen(command_line);
 			def_len = equals - argv[i];
 			strncat(command_line, argv[i], def_len);
 			cmd_len += def_len;
-			command_line[cmd_len] = '\"';
-			cmd_len++;
+			quote_flag = 0;
+			if (equals[0] != '\"') {
+			    /* Make sure that the argument is quoted. */
+			    command_line[cmd_len] = '\"';
+			    cmd_len++;
+			    command_line_len++;
+			    quote_flag = 1;
+			}
 			command_line[cmd_len] = 0;
 			strcat(&command_line[cmd_len], equals);
-			strcat(command_line, "\"");
-			command_line_len += 2;
+			if (quote_flag) {
+			    strcat(command_line, "\"");
+			    command_line_len++;
+			}
 		    } else {
 			strcat(command_line, argv[i]);
 		    }

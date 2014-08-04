@@ -214,6 +214,10 @@ $ gosub compile_driver
 $ return
 $!
 $!
+$quoted_define2
+$ cflags = "-DNDEBUG -DPy_BUILD_CORE -DABIFLAGS=""M"""
+$!
+$!
 $missing_objects:
 $ test = test + 1
 $ lcl_fail = 0

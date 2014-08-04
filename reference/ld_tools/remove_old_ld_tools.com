@@ -93,7 +93,8 @@ $           delete 'old_ld_tool'
 $       endif
 $       if new_ld_tool .nes. ""
 $       then
-$           if (file .nes. "gcc") .and. (file .nes. "g^+^+")
+$           if (file .nes. "gcc") .and. (file .nes. "g^+^+") .and. -
+               (path .eqs. "[usr.bin]")
 $           then
 $               set file/enter='old_ld_tool' 'new_ld_tool'
 $           endif
@@ -108,7 +109,8 @@ $   then
 $       delete 'old_ld_tool_exe'
 $       if new_ld_tool .nes. ""
 $       then
-$           if (file .nes. "gcc") .and. (file .nes. "g^+^+")
+$           if (file .nes. "gcc") .and. (file .nes. "g^+^+") .and. -
+               (path .eqs. "[usr.bin]")
 $           then
 $               set file/enter='old_ld_tool_exe' 'new_ld_tool'
 $           endif
