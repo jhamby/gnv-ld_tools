@@ -2067,6 +2067,62 @@ static char *dereference_symlink(const char *filename){
 #endif
 }
 
+/* Convert the library name to GNV name */
+char * lib_to_gnv_name(const char * name) {
+    char lib_path[1024];
+    char value[256];
+    char * test_path;
+    char * test_name;
+    char * lastdot;
+    char * ret_name;
+    int status;
+    int i;
+
+    ret_name = NULL;
+    test_path = strdup(name);
+    test_name = basename(test_path);
+
+    /* Convert to a logical name */
+    if (strncasecmp("lib", test_name, 3) == 0) {
+        sprintf(lib_path, "gnv$%s", test_name);
+    } else {
+        sprintf(lib_path, "gnv$lib%s", test_name);
+    }
+
+    /* remove the suffix */
+    lastdot = strrchr(lib_path, '.');
+    if (lastdot) {
+        if ((strncasecmp(lastdot, ".a", 3) == 0) ||
+	    (strncasecmp(lastdot, ".so", 4) == 0) ||
+	    (strncasecmp(lastdot, ".olb", 5) == 0) ||
+	    (strncasecmp(lastdot, ".exe", 5) == 0)) {
+
+	    lastdot[0] = 0;
+	}
+    }
+
+    /* Fix up the logical name to not have special characters */
+    i = 7;
+    while (lib_path[i] != 0) {
+	if (!isalnum(lib_path[i])) {
+	    if (lib_path[i] == '+') {
+		lib_path[i] = 'x';
+	    } else {
+		lib_path[i] = '_';
+	    }
+	}
+	i++;
+    }
+    /* Verify that this is a logical name. */
+    /* The file may not yet exist */
+    status = sys_trnlnm(lib_path, value, 255);
+    if ($VMS_STATUS_SUCCESS(status)) {
+	ret_name = strdup(lib_path);
+    }
+    free(test_path);
+    return ret_name;
+}
+
 /*
 ** Locate a library in one of the specified directpories.
 **
@@ -2081,42 +2137,18 @@ char *lookup_lib(list_t libdir, const char *libname)
 
     if (!gnv_link_lib_over_shared) {
 	const char *name;
-	int i;
-	char value[256];
-	int status;
-	char * lastdot;
+	char *gnv_lib_name;
 
 	/* Skip over optional leading colon */
 	name = libname;
 	if (name[0] == ':') {
 	    name++;
 	}
+
 	/* Convert to a logical name */
-	sprintf(lib_path, "gnv$lib%s", name);
-
-	/* remove the suffix */
-	lastdot = strrchr(lib_path, '.');
-	if (lastdot) {
-	    lastdot[0] = 0;
-	}
-
-	/* Fix up the logical name to not have special characters */
-	i = 7;
-	while (lib_path[i] != 0) {
-	    if (!isalnum(lib_path[i])) {
-		if (lib_path[i] == '+') {
-		    lib_path[i] = 'x';
-		} else {
-		    lib_path[i] = '_';
-		}
-	    }
-	    i++;
-	}
-	/* Verify that this is a logical name. */
-	/* The file may not yet exist */
-	status = sys_trnlnm(lib_path, value, 255);
-	if ($VMS_STATUS_SUCCESS(status)) {
-	    return strdup(lib_path);
+	gnv_lib_name = lib_to_gnv_name(name);
+	if (gnv_lib_name != NULL) {
+	    return gnv_lib_name;
 	}
     }
 
@@ -2133,12 +2165,12 @@ char *lookup_lib(list_t libdir, const char *libname)
 	    }
 	} else {
 	    /*
-             * When linking with an object library such as
-             * TCPIP$LIBRARY:TCPIP$LIB.OLB or any other VMS library not
-             * prefixed with "lib". The correct Linux syntax way is to
+	     * When linking with an object library such as
+	     * TCPIP$LIBRARY:TCPIP$LIB.OLB or any other VMS library not
+	     * prefixed with "lib". The correct Linux syntax way is to
 	     * add the colon character between -l and mylib.ext (-l:mylib.ext)
 	     * In which case it looks for mylib.ext instead of libmylib.*
-             */
+	     */
 	    struct stat st;
 	    sprintf(lib_path, "%s/%s", lptr->str, &libname[1]);
 	    if (!lstat(dereference_symlink(lib_path),&st)) {
@@ -2155,8 +2187,24 @@ char *lookup_lib(list_t libdir, const char *libname)
 
 int test_is_library(const char *str, unsigned int slen)
 {
-    return test_suffix(str, slen, ".a") ||
-	   test_suffix(str, slen, ".olb");
+    int result;
+    char * lastdot;
+    char * test_name;
+    char * test_path;
+    char * lib_path;
+    lastdot = strrchr(str, '.');
+    result = test_suffix(str, slen, ".a") ||
+	     test_suffix(str, slen, ".olb");
+    if (result == 0) {
+	return result;
+    }
+    /* Fix-me, we do this test and then discard the result many times. */
+    lib_path = lib_to_gnv_name(str);
+    if (lib_path != NULL) {
+	result = 0;
+	free(lib_path);
+    }
+    return result;
 }
 
 int test_is_shared_library(const char *str, unsigned int slen)
@@ -2169,8 +2217,24 @@ int test_is_shared_library(const char *str, unsigned int slen)
 	    return 1;
         }
     } else {
-	return test_suffix(str, slen, ".so") ||
-	       test_suffix(str, slen, ".exe");
+	int result;
+	result = test_suffix(str, slen, ".a") ||
+		 test_suffix(str, slen, ".olb");
+	if (result) {
+	    char * test_name;
+	    char * test_dir;
+	    char * lib_path;
+	    char * test_path;
+	  /* Fix-me, we do this test and then discard the result many times. */
+	    lib_path = lib_to_gnv_name(str);
+	    if (lib_path != NULL) {
+		free(lib_path);
+		return 1;
+	    }
+	}
+	result = test_suffix(str, slen, ".so") ||
+		 test_suffix(str, slen, ".exe");
+	return result;
     }
     return 0;
 }
@@ -2851,7 +2915,7 @@ void do_link(FILE *fp, FILE *ofp, const char * opt_name_ptr)
             need_fixup = 1;
         }
 	else {
-            if (need_fixup) {
+            if (need_fixup && (strncasecmp(lptr->str, "gnv$lib", 7) != 0 )) {
                 sprintf(curbuf, "%s/%s", curdir, lptr->str);
                 curfile = curbuf;
             }
@@ -2938,7 +3002,14 @@ void do_link(FILE *fp, FILE *ofp, const char * opt_name_ptr)
 	    if (no_translate == 1) {
 		fprintf(ofp, "%s/share\n", curfile);
 	    } else {
-		fprintf(ofp, "%s/share\n", unix_to_vms(curfile, FALSE));
+		char * gnv_lib_file;
+		gnv_lib_file = lib_to_gnv_name(curfile);
+		if (gnv_lib_file != NULL) {
+		    fprintf(ofp, "%s/share\n", gnv_lib_file);
+		    free(gnv_lib_file);
+		} else {
+		    fprintf(ofp, "%s/share\n", unix_to_vms(curfile, FALSE));
+		}
 	    }
 	} else {
 	    /* object file - include symbols */

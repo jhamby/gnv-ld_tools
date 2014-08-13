@@ -3,6 +3,7 @@ $!
 $! Use test_cc foreign command to prevent recursion
 $!--------------------------------------------------
 $ test_cc := $gnv$gnu:[bin]cc.exe
+$! test_cc := $sys$disk:[]gnv$debug-ld.exe
 $ ld := $gnv$gnu:[bin]ld.exe
 $!
 $! Initialize counts.
@@ -29,7 +30,7 @@ $ gosub pedantic_compile
 $!
 $! Quoted define
 $!----------------
-$ gosub quoted_define
+$! gosub quoted_define
 $!
 $! Missing objects/images
 $ gosub missing_objects
@@ -41,6 +42,7 @@ $ gosub cc_command_file
 $!
 $! Special GNV shared logical
 $ gosub ld_gnv_shared_logical
+$ gosub ld_gnv_shared_logical2
 $!
 $! Sumarize the run
 $!---------------------
@@ -338,8 +340,40 @@ $ expect_cc_out = ""
 $ cc/object=test_hello_shr.o test_hello.c
 $ link/share=test_hello_shr.exe test_hello_shr.o
 $ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
-$ cflags = "-o test_hello.exe -ltest_hello_shr.a"
-$! gosub compile_driver
+$ cflags = "-o test_hello.exe -ltest_hello_shr"
+$ gosub compile_driver
+$ exe_shr1 = file + "_shr.exe"
+$ if f$search(exe_shr1) .nes. "" then delete 'exe_shr1';*
+$ map_shr1 = file + "_shr.map"
+$ if f$search(map_shr1) .nes. "" then delete 'map_shr1';*
+$ dsf_shr1 = file + "_.dsf"
+$ if f$search(dsf_shr1) .nes. "" then delete 'dsf_shr1';*
+$ deassign gnv$libtest_hello_shr
+$ return
+$!
+$ld_gnv_shared_logical2:
+$ test = test + 1
+$ lcl_fail = 0
+$ gosub create_test_hello_c
+$ file = "test_hello"
+$ cfile = file + ".c"
+$ efile = "test_hello.exe"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
+$ more_files = ""
+$ expect_prog_status = 1
+$ expect_cc_status = 1
+$ out_file = "test_cc_prog.out"
+$ expect_prog_out = "Hello World"
+$ cc_out_file = "test_cc.out"
+$ expect_cc_out = ""
+$ cc/object=test_hello_shr.o test_hello.c
+$ link/share=test_hello_shr.exe test_hello_shr.o
+$ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
+$ cflags = "-o test_hello.exe libtest_hello_shr.a"
+$ gosub compile_driver
 $ exe_shr1 = file + "_shr.exe"
 $ if f$search(exe_shr1) .nes. "" then delete 'exe_shr1';*
 $ map_shr1 = file + "_shr.map"
@@ -365,7 +399,9 @@ $ then
 $    if f$search(cc_out_file) .nes. ""
 $    then
 $        open/read xx 'cc_out_file'
-$        read xx line_in
+$        line_in = ""
+$        read/end=read_xx1 xx line_in
+$read_xx1:
 $        close xx
 $        if f$locate(expect_cc_out, line_in) .ne. 0
 $        then
@@ -403,7 +439,9 @@ $    endif
 $    if f$search(out_file) .nes. ""
 $    then
 $        open/read xx 'out_file'
-$        read xx line_in
+$        line_in = ""
+$        read/end=read_xx2 xx line_in
+$read_xx2:
 $        close xx
 $        if f$locate(expect_prog_out, line_in) .ne. 0
 $        then
