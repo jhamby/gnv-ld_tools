@@ -13,7 +13,7 @@ Note: I am a hobbyist and am not providing any support or any commitment
 to supply bug fixes or future releases.  This code is as-is with no
 warrantees.
 
-The testing of this wrapper involved using it to build cPython 3.5
+The testing of this wrapper involved using it to build cPython 3.6
 pre-release.
 
 Special installation notes:
@@ -100,8 +100,8 @@ processes if needed.  This is to comply with VMS logical name conventions.
 The logical name BIN is also set in the process table in user mode to be
 GNV$GNU:[BIN] if it is not already set.
 
-The following DECC$Feature settings are in in effect for the LD_TOOLS images
-by default:
+The following DECC$Feature settings are in in effect for the LD_TOOLS image
+and the alias entries by default:
 
 DECC$ACL_ACCESS_CHECK enabled.
 DECC$ALLOW_REMOVE_OPEN_FILES enabled.
@@ -147,7 +147,7 @@ is present the hard links for "cxx" and "c++" will be created.
 
 The "--help" option will show brief information for the specific program
 named used to invoke it.  The "-v" option will list all the options,
-including depecated features.
+including deprecated features.
 
 The intent of this tool is to allow running unmodified Unix build scripts
 on VMS.
@@ -279,6 +279,19 @@ Some examples:
 
 Fixes and enhancements:
 
+** Version 3.0.3
+
+*  Fixed issue in binary 3.0.2 Itanium release were concealed logical names
+   were not being handled correctly.  Added test for this case.
+
+*  Fixed issue were /foo/bar where foo is a logical name was not being
+   correctly translated to foo:bar.
+
+*  Fixed issue where all -D values were being quoted.  Now values that
+   start with a numer will not be quoted.
+
+** Version 3.0.2
+
 *  No logical names required for proper operations other than GNV$GNU
    for locating the simulated "/".
 
@@ -360,10 +373,14 @@ Issues not fixed:
    CC commands.
 
    -W<option> or -Wno-<option> is apparently used by GCC to turn features
-   on or off, and that conflicts with the VMS specific commands added.
+   on or off, and that can conflict with the VMS specific commands added.
 
-   In the future, all VMS specific additions to the LD/CC/CXX wrapper should
-   be removed.
+   These VMS specific options additions to the LD/CC/CXX wrapper are no
+   longer being maintained and should not be used.  They are still provided
+   only for backwards compatibility as long as they do not conflict with
+   normal operations.
+
+   See the GNV_* environment variables mentioned above for alternatives.
 
    The purpose of this tool is to allow you to use an unmodifined Unix
    script or makefile on VMS and have it do something useful and predictable
@@ -372,11 +389,11 @@ Issues not fixed:
    it does not make sense to use this tool.  Instead VMS native modifications
    should just call VMS tools directly.
 
-   In the future, any option that is not found in the current list of
-   GCC compile option will be probalby be removed, unless a Posix C compiler
+   Any option that is not found in the current list of GCC compile options
+   is unsupported and will not be documented, unless a Posix C compiler
    can be found that supports it.
 
-   This includes:
+   The list of obsolete options includes:
    "-crtlsup", "-cxx", "-h", "-K", "-spike", "-FI", "-V", "-Wc", "-accept",
    "-ansi_alias", "-ansi_args", "-arch", "-assume", "-c99", "-check",
    "-check_cmp", "-common", "-double", "-error_limit", "-fast",

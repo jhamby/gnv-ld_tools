@@ -198,9 +198,15 @@ $close flst
 $!
 $ file = "new_gnu:[bin]cc."
 $ gosub ld_aliases
+$ file = "new_gnu:[usr.bin]cc."
+$ gosub ld_aliases
 $ file = "new_gnu:[bin]cxx."
 $ gosub ld_aliases
+$ file = "new_gnu:[usr.bin]cxx."
+$ gosub ld_aliases
 $ file = "new_gnu:[lib]cpp."
+$ gosub ld_aliases
+$ file = "new_gnu:[usr.lib]cpp."
 $ gosub ld_aliases
 $ file = "new_gnu:[bin]gcc."
 $ gosub ld_aliases
@@ -209,6 +215,8 @@ $ then
 $   file = "new_gnu:[bin]g^+^+."
 $   gosub ld_aliases
 $   file = "new_gnu:[bin]c^+^+."
+$   gosub ld_aliases
+$   file = "new_gnu:[usr.bin]c^+^+."
 $   gosub ld_aliases
 $ endif
 $!

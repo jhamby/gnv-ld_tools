@@ -417,6 +417,9 @@ Modification history:
 		  Space after commas.
 		  No space between function name and open parenthesis
 		  Space between if or while and open parenthesis.
+
+        65	John E. Malmberg
+                * Do not quote numeric defines.
 */
 
 #include <assert.h>
@@ -3335,8 +3338,9 @@ int main(int argc, char *argv[])
 			strncat(command_line, argv[i], def_len);
 			cmd_len += def_len;
 			quote_flag = 0;
-			if (equals[0] != '\"') {
+			if (!isdigit(equals[0]) && (equals[0] != '\"')) {
 			    /* Make sure that the argument is quoted. */
+			    /* Unless it is numeric */
 			    command_line[cmd_len] = '\"';
 			    cmd_len++;
 			    command_line_len++;

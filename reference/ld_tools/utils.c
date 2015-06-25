@@ -40,6 +40,8 @@ Modification history:
 		Change unix_to_vms to notice when "^UP^path" happens, and do not
 		prepend any other SYS$DISK:[] stuff.
 
+	09	John Malmberg
+		Do not prepend [] to logname:filename specifications.
 */
 
 #include <stdio.h>
@@ -309,7 +311,8 @@ int res;
     if (strchr(unix_name,':') == NULL)
 	strcpy(unsticky_name, "SYS$DISK:");
 
-    if (strpbrk(unix_name,"[<") == NULL)
+    /* Must have a device or directory logname:file or [dir]file */
+    if (strpbrk(unix_name,":[<") == NULL)
 	strcat(unsticky_name, "[]");
 
     strcat(unsticky_name, unix_name);

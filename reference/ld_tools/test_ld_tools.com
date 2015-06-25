@@ -2,13 +2,22 @@ $! File: test_ld_tools.com
 $!
 $! Use test_cc foreign command to prevent recursion
 $!--------------------------------------------------
-$ test_cc := $gnv$gnu:[bin]cc.exe
+$ if f$search("gnv$gnu:[bin]cc.exe") .eqs. ""
+$ then
+$   ! Acctual installed location
+$   test_cc := $gnv$gnu:[usr.bin]cc.exe
+$   ld := $gnv$gnu:[usr.bin]ld.exe
+$ else
+$   ! Staged location is preferred
+$   test_cc := $gnv$gnu:[bin]cc.exe
+$   ld := $gnv$gnu:[bin]ld.exe
+$ endif
 $! test_cc := $sys$disk:[]gnv$debug-ld.exe
-$ ld := $gnv$gnu:[bin]ld.exe
 $!
 $! Initialize counts.
 $ fail = 0
 $ test = 0
+$ pid = f$getjpi("", "pid")
 $!
 $! Start with testing the version
 $!--------------------------------
@@ -18,9 +27,11 @@ $! Then multi-arch
 $ gosub print_multiarch_test
 $!
 $!
-$! Simple CC test
+$! Simple CC tests
 $!---------------
 $ gosub simple_compile
+$ gosub compile_root_log_dash_c_dash_o
+$ gosub compile_log_dash_c_dash_o
 $!
 $!
 $! flag tests
@@ -30,7 +41,9 @@ $ gosub pedantic_compile
 $!
 $! Quoted define
 $!----------------
-$! gosub quoted_define
+$ gosub quoted_define
+$ gosub quoted_define2
+$ gosub numeric_define
 $!
 $! Missing objects/images
 $ gosub missing_objects
@@ -154,6 +167,67 @@ $ gosub compile_driver
 $ return
 $!
 $!
+$!
+$! Use a concealed logical root for device name
+$! assume single level directory.
+$!
+$compile_root_log_dash_c_dash_o:
+$ test = test + 1
+$ lcl_fail = 0
+$ gosub create_test_hello_c
+$ file = "test_hello"
+$ cfile = file + ".c"
+$ efile = "test_dash_o.out"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
+$ my_default = f$environment("default")
+$ my_dev = f$parse(my_default,,,"device")
+$ my_dir = f$parse(my_default,,,"directory") - "[" - "]" - "<" - ">"
+$ test_root = "test_''pid'_root"
+$ cflags = "-c -o /''test_root'/'my_dir'/''efile'"
+$ noexe = 1
+$ expect_prog_status = 1
+$ expect_cc_status = 1
+$ out_file = "test_cc_prog.out"
+$ expect_prog_out = "Hello World"
+$ cc_out_file = ""
+$ define/trans=conc 'test_root' 'my_dev'
+$ gosub compile_driver
+$ deas 'test_root'
+$ return
+$!
+$!
+$! Use a concealed logical root for device name
+$! assume single level directory.
+$!
+$compile_log_dash_c_dash_o:
+$ test = test + 1
+$ lcl_fail = 0
+$ gosub create_test_hello_c
+$ file = "test_hello"
+$ cfile = file + ".c"
+$ efile = "test_dash_o.out"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
+$ my_default = f$environment("default")
+$ test_log = "test_''pid'_log"
+$ cflags = "-c -o /''test_log'/''efile'"
+$ noexe = 1
+$ expect_prog_status = 1
+$ expect_cc_status = 1
+$ out_file = "test_cc_prog.out"
+$ expect_prog_out = "Hello World"
+$ cc_out_file = ""
+$ define 'test_log' 'my_default'
+$ gosub compile_driver
+$ deas 'test_log'
+$ return
+$!
+$!
 $wextra_compile:
 $ test = test + 1
 $ lcl_fail = 0
@@ -216,8 +290,47 @@ $ gosub compile_driver
 $ return
 $!
 $!
-$quoted_define2
+$!
+$quoted_define2:
+$ test = test + 1
+$ lcl_fail = 0
+$ gosub create_test_hello_c
+$ file = "test_hello"
+$ cfile = file + ".c"
+$ efile = "a.out"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
 $ cflags = "-DNDEBUG -DPy_BUILD_CORE -DABIFLAGS=""M"""
+$ expect_prog_status = 1
+$ expect_cc_status = 1
+$ out_file = "test_cc_prog.out"
+$ expect_prog_out = "flags=M"
+$ cc_out_file = ""
+$ gosub compile_driver
+$ return
+$!
+$!
+$numeric_define:
+$ test = test + 1
+$ lcl_fail = 0
+$ gosub create_test_hello_c
+$ file = "test_hello"
+$ cfile = file + ".c"
+$ efile = "a.out"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
+$ cflags = "-DTest_NDEFINE=0x03500"
+$ expect_prog_status = 1
+$ expect_cc_status = 1
+$ out_file = "test_cc_prog.out"
+$ expect_prog_out = "13568"
+$ cc_out_file = ""
+$ gosub compile_driver
+$ return
 $!
 $!
 $missing_objects:
@@ -386,6 +499,7 @@ $!
 $! Generic Compiler driver
 $!-------------------------
 $compile_driver:
+$ if f$type(noexe) .eqs. "" then noexe = 0
 $ if cc_out_file .nes. "" then define/user sys$output 'cc_out_file'
 $ test_cc 'cflags' 'cfile' 'more_files'
 $ cc_status = '$status' .and. (.not. %x10000000)
@@ -427,31 +541,35 @@ $        write sys$output "Executable not produced!"
 $        lcl_fail = lcl_fail + 1
 $    endif
 $ else
-$    define/user sys$output 'out_file'
-$    mcr sys$disk:[]'efile'
-$    prog_status = '$status'
-$    if prog_status .nes. expect_prog_status
+$    if noexe .eq. 0
 $    then
-$        write sys$output -
-   "Program status ''proj_status' is not ''expect_prog_status'!"
-$        lcl_fail = lcl_fail + 1
-$    endif
-$    if f$search(out_file) .nes. ""
-$    then
-$        open/read xx 'out_file'
-$        line_in = ""
-$        read/end=read_xx2 xx line_in
-$read_xx2:
-$        close xx
-$        if f$locate(expect_prog_out, line_in) .ne. 0
+$        define/user sys$output 'out_file'
+$        mcr sys$disk:[]'efile'
+$        prog_status = '$status'
+$        if prog_status .nes. expect_prog_status
 $        then
-$            write sys$output "''expect_prog_out' not found in output"
+$            write sys$output -
+   "Program status ''proj_status' is not ''expect_prog_status'!"
 $            lcl_fail = lcl_fail + 1
 $        endif
-$        delete 'out_file';*
-$    else
-$        write sys$output "Output file not created";
-$        lcl_fail = lcl_fail + 1
+$        if f$search(out_file) .nes. ""
+$        then
+$            open/read xx 'out_file'
+$            line_in = ""
+$            read/end=read_xx2 xx line_in
+$read_xx2:
+$            close xx
+$            if f$locate(expect_prog_out, line_in) .ne. 0
+$            then
+$                write sys$output "''expect_prog_out' not found in output"
+$                lcl_fail = lcl_fail + 1
+$		 write sys$output "Got -''line_in'"
+$            endif
+$            delete 'out_file';*
+$        else
+$            write sys$output "Output file not created";
+$            lcl_fail = lcl_fail + 1
+$        endif
 $    endif
 $    delete 'efile';*
 $ endif
@@ -464,6 +582,7 @@ $ if lcl_fail .ne. 0 then fail = fail + 1
 $ return
 $!
 $test_clean_up:
+$ noexe = 1
 $ file = "test_hello.c"
 $ if f$search(file) .nes. "" then delete 'file';
 $ return
@@ -476,10 +595,19 @@ $ create 'file'
 #include <stdio.h>
 
 int main(int argc, char **argv) {
+#ifdef Test_NDEFINE
+    printf("%d\n", Test_NDEFINE);
+    return 1;
+#endif
 #ifdef TEST_DEFINE
     puts(TEST_DEFINE);
     return 1;
-#else
+#endif
+#if defined(NDEBUG) && defined(Py_BUILD_CORE)
+    printf("flags=%s\n", ABIFLAGS);
+    return 1;
+#endif
+#if !defined(TEST_DEFINE) && !defined(Test_NDEFINE) && !defined(NDEBUG)
     puts("Hello World!");
     return 0;
 #endif
