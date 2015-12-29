@@ -30,7 +30,7 @@ $ if mode .eqs. "install"
 $ then
 $!   create/dir new_gnu:[bin]/prot=o:rwed
 $   create/dir new_gnu:[vms_bin]/prot=o:rwed
-$!   create/dir new_gnu:[lib]/prot=o:rwed
+$   create/dir new_gnu:[lib]/prot=o:rwed
 $   create/dir new_gnu:[usr.bin]/prot=o:rwed
 $!   create/dir new_gnu:[usr.share.doc.ld_tools]/prot=o:rwed
 $!   create/dir new_gnu:[usr.share.info]/prot=o:rwed

@@ -18,6 +18,8 @@ pre-release.
 
 Special installation notes:
 
+*  VAX/VMS implementation is experimental and may not be complete.
+
 *  Please see https://sourceforge.net/p/gnv/wiki/InstallingGNVPackages/
    for the latest information on installing GNV related PCSI kits.
 
@@ -279,6 +281,98 @@ Some examples:
 
 Fixes and enhancements:
 
+** Version 3.0.4
+
+*  Fixed issue where string defines were always being quoted.  Now string
+   defines are only quoted when originally quoted.
+
+*  The existing wrapper would ignore unknown values to qualifiers that
+   took a specific set of values that needed to be mapped to compiler
+   values.  Now a message will be written about the value being ignored.
+
+*  If a directory name had a dot in it, and the executable was intended
+   not to have an extension per Posix mode defaults, this now works.
+   Previously this would cause the executable file to have a .EXE
+   extension.
+
+*  Add support for -std=xxx.  Note as there is no a 1:1 map in standard
+   support as GCC, requesting a -std=xxx value will get you the closest
+   equivalent.
+
+   Use the GNV_*_QUALIFIERS environment variables to override if these
+   standard settings cause problems with building your programs.
+
+   Note that the known VMS C runtime libraries do not provide full C99
+   support, so you may have to add supplemntal libraries or other hacks.
+
+   This wrapper program is not currently structured to pass C++ options
+   only to the C++ compiler and CC only options to the CC compiler.
+
+   DEC C supported options:
+
+   -std=c90             /STANDARD=ISOC94
+   -std=c89             /STANDARD=ANSI89
+   -std=iso9899:1990    /STANDARD=ISOC94
+   -std=iso9899:199409  /STANDARD=ISOC94
+   -std=c99             /STANDARD=C99
+   -std=c9x             /STANDARD=C99
+   -std=iso9899:1999    /STANDARD=C99
+   -std=iso9899:199x    /STANDARD=C99
+
+    DEC C++ supported options
+
+   -std=c++98           /STANDARD=LATEST
+   -std=g++98           /STANDARD=GNU      (Not supported on  VAX)
+
+   Other values are not supported by the known C compilers and will be
+   ignored.  GNV Ticket: https://sourceforge.net/p/gnv/bugs/99/
+
+* -print-search-dirs now prints out some documentation similar to GCC.
+
+* -fstrict-aliasing sets /ANSI, -fno-strict-aliases sets /NOANSI.
+  Ignored on VAX.
+
+* -fPIC is now ignored.  VMS compilers generate PIC unless told otherwise.
+
+* -w now inhibits all warnings to be compatible with GCC use.
+  Previously it enabled warnings to level 3.
+
+* -Wall is mapped to /WARN=(WARN=(OVERFLOW, LEVEL3))
+
+* -Wextra is mapped to /WARN=(WARN=(ALL))
+
+* -Wpendantic and -pedantic-errors settings are now ignored.
+
+* Added unsupported options to internal table for possible future
+  implementation once someone figures out how to map them.
+  -fstack*
+  -fsyntax-only
+  -fmax-errors=n
+  -fno-xxx
+  -fvisibility=xxx
+  -print-xxx
+  -Warray-bounds
+  -Wad* -Wag*
+  -Wb*
+  -Wc*
+  -Wd*
+  -Wem* -Wen* -Wer*
+  -Wf*
+  -Wi*
+  -Wj*
+  -Wl*
+  -Wm*
+  -Wn*
+  -Wo*
+  -Wp*
+  -Wr*
+  -Ws*
+  -Wt*
+  -Wu*
+  -Wv*
+  -Ww*
+  -Wz*
+
 ** Version 3.0.3
 
 *  Fixed issue in binary 3.0.2 Itanium release were concealed logical names
@@ -357,8 +451,6 @@ Fixes and enhancements:
    exists before the action is executed.
 
 Issues not fixed:
-
-*  While this program will build on VAX, it currently does not work.
 
 *  The -x xxx option is positional, not global.
    https://sourceforge.net/p/gnv/bugs/88/

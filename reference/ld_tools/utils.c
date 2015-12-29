@@ -410,10 +410,13 @@ const char *get_suffix(const char *str) {
     const char *ptr;
 
     for (ptr = str + len - 1; ptr >= str; --ptr) {
+	if (*ptr == '/') {
+	    /* Null Suffix */
+	    return &str[len];
+	}
 	if (*ptr == '.')
 	    return ptr;
     }
-
     return &str[len];
 }
 

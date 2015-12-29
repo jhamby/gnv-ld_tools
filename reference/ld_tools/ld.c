@@ -418,8 +418,16 @@ Modification history:
 		  No space between function name and open parenthesis
 		  Space between if or while and open parenthesis.
 
-        65	John E. Malmberg
-                * Do not quote numeric defines.
+	65	John E. Malmberg
+		* Do not quote numeric defines.
+
+	66	John E. Malmberg
+		* Added execv_symbol test program to call this program
+		  the same way Bash does for testing.
+		* Do not quote definitions unless they are already
+		  quoted.
+		* Fix program name setting for VAX.
+
 */
 
 #include <assert.h>
@@ -537,6 +545,7 @@ typedef enum {
     X_preprocess,
     X_proto,
     X_p_multiarch,
+    X_p_searchdirs,
     X_rpath,
     X_retain,
     X_shared,
@@ -636,6 +645,8 @@ int verbose = 0;
 
 char *command_line=NULL;
 int command_line_len;
+extern char *program_name;
+void * set_program_name(const char *);
 
 enum {
     force_none, force_c, force_cxx
@@ -1478,9 +1489,12 @@ void output_help( void)
 	    break;
 	case X_preprocess:
 	    break;
-        case X_p_multiarch:
-            text = "** Print multiarch version tuple and exit.";
-            break;
+	case X_p_multiarch:
+	    text = "** Print multiarch version tuple and exit.";
+	    break;
+	case X_p_searchdirs:
+	    text = "** Print search directories (incomplete) and exit.";
+	    break;
 	case X_proto:
 	    list_ptr = &l_proto;
 	    break;
@@ -1963,16 +1977,6 @@ void del_list(arglist_t *lptr)
     lptr->last = &lptr->list;
 }
 
-#if 0
-/*
-** Get the value for an option when the value is specified
-** as part of the option, such as for -D.
-*/
-char *get_argval( ccopt_t *ccopt, char *arg)
-{
-    return arg + strlen(ccopt->arg_str);
-}
-#endif
 
 /*
 ** Lookup a keyword allowed for an argument and return
@@ -2001,7 +2005,7 @@ char *lookup_val(char *i_src, char *r_str)
 	    }
  	}
     }
-
+    errmsg("Ignoring unrecognized option %s", i_src);
     return NULL;
 }
 
@@ -2011,63 +2015,61 @@ char *lookup_val(char *i_src, char *r_str)
 ** is undefined.
 */
 #ifndef PATH_MAX
+#ifdef __VAX
 #define PATH_MAX 255
+#else
+#define PATH_MAX 4096
+#endif
 #endif
 static char *dereference_symlink(const char *filename){
 #if defined (S_ISLNK)
-   char actual_file[PATH_MAX];
+   char actual_file[PATH_MAX+1];
    struct stat st;
    int number_found;
 
    /*
     ** Get the Unix filename.
     */
-#ifdef __VMS
-   if (strpbrk(filename,"<[>]"))
-       strcpy(actual_file,decc$translate_vms(filename));
+   if (strpbrk(filename,"<[>]:"))
+       strcpy(actual_file, vms_to_unix(filename));
    else
-#endif
-       strcpy(actual_file,filename);
+       strcpy(actual_file, filename);
 
    /*
     ** Walk through all symlinks to get the final translation
     */
-#ifdef __CRTL_VER
 #if __CRTL_VER >= 80300000
    while (!lstat(actual_file,&st) && S_ISLNK(st.st_mode)){
-       char realfile[PATH_MAX];
+       char realfile[PATH_MAX + 1];
        ssize_t size;
 
-       memset(realfile,0,sizeof(realfile));
-       size = readlink(actual_file,realfile,sizeof(realfile));
-       if (!lstat(realfile,&st) && S_ISREG(st.st_mode)){
-           strcpy(actual_file,realfile);
+       memset(realfile, 0, sizeof(realfile));
+       size = readlink(actual_file, realfile, sizeof(realfile));
+       if (!lstat(realfile, &st) && S_ISREG(st.st_mode)){
+           strcpy(actual_file, realfile);
            break;
        }
-       if (!lstat(realfile,&st) && S_ISLNK(st.st_mode))
-           strcpy(actual_file,realfile);
+       if (!lstat(realfile, &st) && S_ISLNK(st.st_mode))
+           strcpy(actual_file, realfile);
        else{
-           strcpy(actual_file,dirname(actual_file));
-           strcat(actual_file,"/");
-           strcat(actual_file,realfile);
+           char temp_name[PATH_MAX + 1];
+           strcpy(temp_name, actual_file);
+           strcpy(actual_file, dirname(temp_name));
+           strcat(actual_file, "/");
+           strcat(actual_file, realfile);
        }
    }
 #endif
 #endif
 
-#ifdef __VMS
    /*
    ** Get the VMS style dereferenced filename if
    ** filename was a VMS style filename.
    */
-   if (strpbrk(filename,"<[>]"))
+   if (strpbrk(filename, "<[>]:"))
        return(unix_to_vms(actual_file, 0));
-#endif
 
    return strdup(actual_file);
-#else
-   return (char *)filename;
-#endif
 }
 
 /* Convert the library name to GNV name */
@@ -2270,13 +2272,15 @@ void do_outfile_cmdfile(FILE *fp, const char *action) {
     char cmd_file[256];
     char * ext;
     char * output_file;
+    char * output_file2;
     int acc_stat;
 
     if (outfile == NULL) {
 	return;
     }
     output_file = strdup(outfile);
-    path = dirname(output_file);
+    output_file2 = strdup(outfile);
+    path = dirname(output_file2);
     path_len = strlen(path);
     name = basename(output_file);
     ext = strrchr(output_file, '.');
@@ -2298,6 +2302,7 @@ void do_outfile_cmdfile(FILE *fp, const char *action) {
 	fprintf(fp, "$@%s\n", unix_to_vms(cmd_file, FALSE));
     }
     free(output_file);
+    free(output_file2);
 }
 
 /*
@@ -2514,44 +2519,6 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
 
        }
 
-#if 0
-/* This is the old pre-include code */
-    if (files_list) {
-        lptr = files_list;
-	fprintf(fp, " ");
-        while (lptr) {
-            if (lptr != files_list)
-                fprintf(fp, ",-\n");
-
-            if (l_preinclude_files.list) {
-                list_t preinc_ptr = l_preinclude_files.list;
-
-                while (preinc_ptr) {
-                    fprintf(fp, "%s+-\n", unix_to_vms(preinc_ptr->str, FALSE));
-                    preinc_ptr = preinc_ptr->next;
-                }
-            }
-
-            fprintf(fp, "%s", unix_to_vms(lptr->str, FALSE));
-
-            if (!preprocess) {
-                if (outfile && !linkx) {
-                    fprintf(fp, "-\n/object=%s-\n",
-			    unix_to_vms(outfile, FALSE));
-                } else {
-                    fprintf(fp, "-\n/object=%s-\n",
-                            unix_to_vms(basename(
-					    new_suffix3(lptr->str,
-					    default_obj_suffix)), FALSE));
-                }
-            }
-
-            lptr = lptr->next;
-        }
-
-        fprintf(fp, "\n");
-    }
-#else
 
 /*
 ** This is the new pre-include code. We also use the "compile sys$input" trick
@@ -2623,7 +2590,6 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
     } else {
         fprintf(fp, "\n");
     }
-#endif
 }
 
 /*
@@ -3239,7 +3205,8 @@ int main(int argc, char *argv[])
 	posix_compliant_pathnames = decc$feature_get_value (i, 1);
     }
 #endif
-    p = basename(argv[0]);
+    set_program_name(argv[0]);
+    p = basename(program_name);
     if (strncasecmp(p, "gnv$", 4) == 0) {
         p = p + 4;
     }
@@ -3299,9 +3266,6 @@ int main(int argc, char *argv[])
      *
      * To properly parse it, we must reconstitute it back to a single
      * string with a space separating each component.
-     *
-     * Strings like "-DTEST_DEFINE=foo bar" need to be changed to
-     * "-DTEST_DEFINE=\"foo bar\"".
      */
 
     command_line_len = 0;
@@ -3324,40 +3288,7 @@ int main(int argc, char *argv[])
 		if (command_line[0] != 0) {
 		    strcat(command_line, " ");
 		}
-		/* -D optional values need to be quoted. */
-		if ((argv[i][0] == '-') && (argv[i][1] == 'D')) {
-		    char *equals;
-		    equals = strchr(argv[i], '=');
-		    if (equals) {
-			int def_len;
-			int cmd_len;
-			int quote_flag;
-			equals++;
-			cmd_len = strlen(command_line);
-			def_len = equals - argv[i];
-			strncat(command_line, argv[i], def_len);
-			cmd_len += def_len;
-			quote_flag = 0;
-			if (!isdigit(equals[0]) && (equals[0] != '\"')) {
-			    /* Make sure that the argument is quoted. */
-			    /* Unless it is numeric */
-			    command_line[cmd_len] = '\"';
-			    cmd_len++;
-			    command_line_len++;
-			    quote_flag = 1;
-			}
-			command_line[cmd_len] = 0;
-			strcat(&command_line[cmd_len], equals);
-			if (quote_flag) {
-			    strcat(command_line, "\"");
-			    command_line_len++;
-			}
-		    } else {
-			strcat(command_line, argv[i]);
-		    }
-		} else {
-		    strcat(command_line, argv[i]);
-		}
+		strcat(command_line, argv[i]);
 	    }
 	}
     }
@@ -3677,6 +3608,13 @@ int main(int argc, char *argv[])
 		    linkx = 0;
 		    objfile = 0;
 		    version = 2;
+		    break;
+
+		case X_p_searchdirs:
+		    preprocess = 0;
+		    linkx = 0;
+		    objfile = 0;
+		    version = 3;
 		    break;
 
 		case X_makelib:		/* ??? I think -c make an archive */
@@ -4108,7 +4046,9 @@ int main(int argc, char *argv[])
     }
 
     if (version) {
-        if (version == 2) {
+        char * argv0_copy;
+        switch (version) {
+        case 2:
            /* New multiarch string support hacked on to version processing */
 #ifdef __vax
            puts("vax-vms-hp");
@@ -4124,7 +4064,15 @@ int main(int argc, char *argv[])
 #endif /* __alpha */
 #endif /* __vax */
 	   return 0;
-        } else {
+        case 3:
+           /* Print search dirs debugging support */
+           /* TODO: Actually look up the values that are used. */
+           argv0_copy = dirname(argv[0]);
+           printf("install: %s\n", argv0_copy);
+           printf("programs: %s\n", argv0_copy);
+           printf("libraries: %s\n", "/usr/lib:/lib:/sys$library");
+           return 0;
+        default:
             printf("GNV %s %s-%s %s %s\n", actual_name,
                    PACKAGE_VERSION, VMS_ECO_LEVEL, __DATE__, __TIME__);
         }

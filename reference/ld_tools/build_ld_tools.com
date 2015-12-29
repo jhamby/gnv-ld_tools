@@ -12,6 +12,7 @@ $   cc = cc
 $ endif
 $
 $ cc = cc + "/DEFINE=(__COE_SYSTEM,_POSIX_EXIT,_VMS_WAIT)"
+$ cc = cc + "/nested_include_directory=primary"
 $ on warning then goto no_main_qual
 $ msgsetting = f$environment("message")
 $ ! hush, we are just testing.
@@ -33,6 +34,7 @@ $ endif
 $ on error then goto done
 $ set verify
 $ cc ld.c
+$ cc vms_progname.c
 $ if f$getsyi ("arch_name") .eqs. "IA64"
 $ then
 $   cc /point=long /define=(__NEW_STARLET) elf.c
@@ -44,11 +46,19 @@ $   cc vms_crtl_init.c/obj=vms_crtl_init.obj
 $ endif
 $ if f$search ("elf.obj") .nes. ""
 $ then
-$   link/exe=gnv$ld.exe ld,elf,utils,vms_crtl_init
-$   link/debug/exe=gnv$debug-ld.exe ld,elf,utils,vms_crtl_init
+$   link/exe=gnv$ld.exe ld,elf,utils,vms_crtl_init,vms_progname
+$   link/debug/exe=gnv$debug-ld.exe ld,elf,utils,vms_crtl_init,vms_progname
 $ else
-$   link/exe=gnv$ld.exe ld,utils,vms_crtl_init
-$   link/debug/exe=gnv$debug-ld.exe ld,utils,vms_crtl_init
+$   link/exe=gnv$ld.exe ld,utils,vms_crtl_init,vms_progname
+$   link/debug/exe=gnv$debug-ld.exe ld,utils,vms_crtl_init,vms_progname
+$ endif
+$ if f$search("execv_symbol.obj") .eqs. ""
+$ then
+$   cc execv_symbol.c
+$ endif
+$ if f$search("execv_symbol.exe") .eqs. ""
+$ then
+$   link execv_symbol
 $ endif
 $done:
 $ set noverify
@@ -77,8 +87,20 @@ $  file="elf.obj"
 $  if f$search(file) .nes. "" then delete 'file';*
 $  file="elf.lis"
 $  if f$search(file) .nes. "" then delete 'file';*
+$  file="vms_progname.obj"
+$  if f$search(file) .nes. "" then delete 'file';*
+$  file="vms_progname.lis"
+$  if f$search(file) .nes. "" then delete 'file';*
 $  file="vms_crtl_init.obj"
 $  if f$search(file) .nes. "" then delete 'file';*
 $  file="vms_crtl_init.lis"
+$  if f$search(file) .nes. "" then delete 'file';*
+$  file="execv_symbol.exe"
+$  if f$search(file) .nes. "" then delete 'file';*
+$  file="execv_symbol.obj"
+$  if f$search(file) .nes. "" then delete 'file';*
+$  file="execv_symbol.lis"
+$  if f$search(file) .nes. "" then delete 'file';*
+$  file="execv_symbol.map"
 $  if f$search(file) .nes. "" then delete 'file';*
 $exit
