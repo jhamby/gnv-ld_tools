@@ -16,8 +16,8 @@ $   test_cc_cmd = "/bin/cc"
 $   ld = "gnv$gnu:[bin]ld.exe"
 $   ld_cmd = "/bin/ld"
 $ endif
-$ test_cc = "sys$disk:[]gnv$ld.exe"
-$ test_cc_cmd = "./ld"
+$! test_cc = "sys$disk:[]gnv$ld.exe"
+$! test_cc_cmd = "./ld"
 $ execv := $sys$disk:[]execv_symbol.exe
 $!
 $ arch_type = f$getsyi("ARCH_NAME")
@@ -44,6 +44,7 @@ $!---------------
 $ gosub simple_compile
 $ gosub compile_root_log_dash_c_dash_o
 $ gosub compile_log_dash_c_dash_o
+$ gosub compile_stdin
 $ if arch_code .nes. "V"
 $ then
 $   gosub compile_dot_in_directory
@@ -266,6 +267,22 @@ $ noexe = 1
 $ define 'test_log' 'my_default'
 $ gosub compile_driver
 $ deas 'test_log'
+$ return
+$!
+$!
+$compile_stdin:
+$ write sys$output "Compile stdin"
+$ test = test + 1
+$ file = "-"
+$ cfile = "-"
+$ cflags = "-xc"
+$ efile = "a.out"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
+$ out_file = ""
+$ gosub compile_driver
 $ return
 $!
 $!
@@ -774,11 +791,21 @@ $ if cfile .nes. "" then cmd_symbol = cmd_symbol  + " " + cfile
 $ if more_files .nes. "" then cmd_symbol = cmd_symbol + " " + more_files
 $ cmd_symbol = f$edit(cmd_symbol, "trim")
 $ write sys$output "  command: """, cmd_symbol, """"
-$ if cc_out_file .nes. "" then define/user sys$output 'cc_out_file'
-$ execv 'test_cc' cmd_symbol
+$ if cfile .eqs. "-"
+$ then
+$   ! Can't use cc_out_file here for now.
+$   cc_out_file = ""
+$   simple_c = "int main(int argc, char **argv) {return 0;}"
+$   pipe write sys$output simple_c -
+| execv 'test_cc' cmd_symbol
+$ else
+$   if cc_out_file .nes. "" then define/user sys$output 'cc_out_file'
+$   execv 'test_cc' cmd_symbol
+$ endif
 $ cc_status = '$status' .and. (.not. %x10000000)
 $ if cc_status .ne. expect_cc_status
 $ then
+$   show log sys$output
 $   write sys$output "  ** CC status ''cc_status' is not ''expect_cc_status'!"
 $   lcl_fail = lcl_fail + 1
 $ endif
@@ -862,7 +889,7 @@ $    endif
 $ else
 $   if noexe .eq. 0
 $   then
-$       define/user sys$output 'out_file'
+$       if out_file .nes. "" then define/user sys$output 'out_file'
 $       on severe_error then goto exe_fatal
 $       exe_file = f$parse(efile, "sys$disk:[]")
 $       mcr 'exe_file'
@@ -874,23 +901,26 @@ $           write sys$output -
    "  ** Program status ''proj_status' is not ''expect_prog_status'!"
 $           lcl_fail = lcl_fail + 1
 $       endif
-$       if f$search(out_file) .nes. ""
+$       if out_file .nes. ""
 $       then
-$           open/read xx 'out_file'
-$           line_in = ""
-$           read/end=read_xx2 xx line_in
-$read_xx2:
-$           close xx
-$           if f$locate(expect_prog_out, line_in) .ne. 0
+$           if f$search(out_file) .nes. ""
 $           then
-$              write sys$output "  ** ''expect_prog_out' not found in output"
-$              lcl_fail = lcl_fail + 1
-$              write sys$output "  ** Got -''line_in'-"
+$               open/read xx 'out_file'
+$               line_in = ""
+$               read/end=read_xx2 xx line_in
+$read_xx2:
+$               close xx
+$               if f$locate(expect_prog_out, line_in) .ne. 0
+$               then
+$                write sys$output "  ** ''expect_prog_out' not found in output"
+$                  lcl_fail = lcl_fail + 1
+$                  write sys$output "  ** Got -''line_in'-"
+$               endif
+$               delete 'out_file';*
+$           else
+$               write sys$output "  ** Output file not created"
+$               lcl_fail = lcl_fail + 1
 $           endif
-$           delete 'out_file';*
-$       else
-$           write sys$output "  ** Output file not created"
-$           lcl_fail = lcl_fail + 1
 $       endif
 $   endif
 $   delete 'efile';*

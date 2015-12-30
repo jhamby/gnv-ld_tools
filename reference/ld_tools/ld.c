@@ -428,6 +428,9 @@ Modification history:
 		  quoted.
 		* Fix program name setting for VAX.
 
+	67	John E. Malmberg
+		* Added support for input from stdin from
+		  Eric Robertson of IQware.
 */
 
 #include <assert.h>
@@ -612,6 +615,7 @@ int gnv_cc_include_length_max;
 int gnv_cc_no_module_first;
 int gnv_cc_no_inc_primary;
 char module_first[1024];
+char gnv_cc_stdin_file[1024];
 int gnv_ld_object_length_max;
 
 char *gnv_cc_set_command;
@@ -656,6 +660,7 @@ int debug = 0;
 int debug_link = 0;
 int optimize = 1;
 int preprocess = 0;
+int process_stdin = 0;
 int version = 0;
 int help = 0;
 int mms_dep_file = 0;
@@ -807,6 +812,29 @@ static int sys_trnlnm
 }
 
 /*
+ * generate_stdin_file Generates a file based on the stdin stream. It copies
+ * the contents of stdin to a file with a specified file name. This function
+ * is used expressly for the purpose of allowing a user to specify a
+ * standalone hyphen in the cc command in order to compile stdin.
+ */
+ void generate_stdin_file(char *filename)
+{
+    FILE *outfile;
+    char linebuffer[32678];
+
+    remove(filename);
+    outfile = fopen(filename, "w");
+
+    fgets(linebuffer, sizeof(linebuffer), stdin);
+    while (!feof(stdin) ) {
+        fputs(linebuffer, outfile);
+        fgets(linebuffer, sizeof(linebuffer), stdin);
+    }
+    fclose(outfile);
+}
+
+
+/*
 ** Support for making sure that we don't have duplicates in the symvec list
 **
 ** The format of the list is: /name1/name2/name3.../
@@ -855,16 +883,16 @@ void symvecAdd(char *name) {
 
 void symvecRead(char *fname) {
     FILE *f;
-    char buf[1024];
+    char read_buf[1024];
     f = fopen(fname, "r");
     if (!f) {
 	errmsg("Unable to read auto_symvec file %s",fname);
 	exit(EXIT_FAILURE);
     }
-    fgets(buf, sizeof(buf), f);
+    fgets(read_buf, sizeof(read_buf), f);
     while (!feof(f) ) {
 	char *p, *p2;
-	p = strstr(buf,"SYMBOL_VECTOR=(");
+	p = strstr(read_buf, "SYMBOL_VECTOR=(");
 	if (p != NULL) {
 	    p = p+15;
 	    p2 = strchr(p,'=');
@@ -873,7 +901,7 @@ void symvecRead(char *fname) {
 		symvecAdd(p);
 	    }
 	}
-	fgets(buf, sizeof(buf), f);
+	fgets(read_buf, sizeof(read_buf), f);
     }
     fclose(f);
     if (symvecList) {
@@ -1806,20 +1834,20 @@ void create_define_list(const char* file_base) {
 void output_list (FILE *fp, arglist_t *arglist)
 {
     list_t lptr = arglist->list;
-    char buf[MAX_DCL_LINE_LENGTH+1], this_one[512];
+    char dcl_buf[MAX_DCL_LINE_LENGTH+1], this_one[512];
     int len = 0;
     char *p;
 
     if (!lptr)
 	return;
 
-    *buf = '\0';
+    *dcl_buf = '\0';
 
     if (arglist->str && !arglist->rule)
-	sprintf(buf, "%s=(", arglist->str);
+	sprintf(dcl_buf, "%s=(", arglist->str);
 
-    len = strlen(buf);
-    p = buf + len;
+    len = strlen(dcl_buf);
+    p = dcl_buf + len;
 
     while (lptr) {
 	int this_len;
@@ -1836,10 +1864,10 @@ void output_list (FILE *fp, arglist_t *arglist)
 
 	if (len && (len + this_len) > 127) {
 	    *p = '\0';
-	    fprintf(fp, "%s-\n", buf);
+	    fprintf(fp, "%s-\n", dcl_buf);
 	    len = 0;
-	    *buf = '\0';
-	    p = buf;
+	    *dcl_buf = '\0';
+	    p = dcl_buf;
 	}
 
 	strcpy(p, this_one);
@@ -1854,8 +1882,8 @@ void output_list (FILE *fp, arglist_t *arglist)
     if (arglist->str && !arglist->rule)
 	strcat(p++, ")");
 
-    if (p != buf)
-	fprintf(fp, "%s-\n", buf);
+    if (p != dcl_buf)
+	fprintf(fp, "%s-\n", dcl_buf);
 
     return;
 }
@@ -1870,18 +1898,18 @@ void output_list (FILE *fp, arglist_t *arglist)
 
 char *make_opt( char *str, char *val)
 {
-    static char buf[MAX_DCL_LINE_LENGTH + 1];
+    static char dcl_buf[MAX_DCL_LINE_LENGTH + 1];
 
     if (str && *str) {
 	if (!val || !*val)
 	    return str;
 
 	if (strchr(val,','))
-	    sprintf(buf, "%s=(%s)", str, val);
+	    sprintf(dcl_buf, "%s=(%s)", str, val);
 	else
-	    sprintf(buf, "%s=%s", str, val);
+	    sprintf(dcl_buf, "%s=%s", str, val);
 
-	return strdup(buf);
+	return strdup(dcl_buf);
     }
 
    return val;
@@ -2508,7 +2536,7 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
 
     if (preprocess) {
 
-        if (!is_cxx)
+        if (!is_cxx && !use_cxx)
             fprintf(fp, "/stand=common -\n");
 
         sprintf(prep_file_name, "%si", cmd_proc_name_ptr); /* append an i */
@@ -2712,13 +2740,13 @@ void do_link(FILE *fp, FILE *ofp, const char * opt_name_ptr)
     }
 
     if (debug && !debug_link) {
-	static char buf[1024];
+	static char opt_buf[1024];
 	const char *dsf_suffix;
 
-	strcpy(buf, outfile);
-	dsf_suffix = get_suffix(buf);
+	strcpy(opt_buf, outfile);
+	dsf_suffix = get_suffix(opt_buf);
 	strcpy((char *)dsf_suffix, ".DSF");
-	fprintf(fp, "/DSF=%s-\n", unix_to_vms (buf, FALSE));
+	fprintf(fp, "/DSF=%s-\n", unix_to_vms (opt_buf, FALSE));
     }
 
     /*
@@ -3389,7 +3417,14 @@ int main(int argc, char *argv[])
 	while(isspace(command_line[i]) && (command_line[i] != '\0'))
 	   i++;
 
-	if (command_line[i] == '-') {
+	/*
+	 * Whenever we see a hyphen, process what follows it as option text
+	 * except in the special case where the hyphen is followed by space
+	 * characters or nothing. In which case it should be interpreted as
+	 * an input file from stdin.
+	 */
+	if ((command_line[i] == '-') &&
+            (!isspace(command_line[i+1])) && (command_line[i+1] != '\0')) {
 	    int j;
 	    ccopt_t *cc_opt;
 	    phase_t phase;
@@ -3869,7 +3904,30 @@ int main(int argc, char *argv[])
 	    curr_arg[j-i] = 0;
 	    i = j;
 
-	    value_ptr = strdup(curr_arg);
+	    /*
+	     * Check to see if we are processing stdin (i.e. user typed a
+	     * standalone hyphen as part of the compilation command line).
+	     * If we are processing stdin, then generate the special file
+	     * name for the file that will be used to hold the contents
+	     * from stdin. Then generate the file from stdin.
+	     */
+	    if (strcmp(curr_arg, "-")) {
+	        value_ptr = strdup(curr_arg);
+	    } else {
+		process_stdin = 1;
+		strcpy(gnv_cc_stdin_file, "gnv$cc_stdin_XXXXXX");
+		mktemp(&gnv_cc_stdin_file[13]);
+		if (force_src == force_c) {
+		    strcat(gnv_cc_stdin_file, ".c");
+		} else if (force_src == force_cxx) {
+		    strcat(gnv_cc_stdin_file, ".cxx");
+		} else {
+		    if (preprocess) strcat(gnv_cc_stdin_file, ".c");
+		}
+		value_ptr = strdup(gnv_cc_stdin_file);
+		generate_stdin_file(gnv_cc_stdin_file);
+	    }
+
             len = strlen(value_ptr);
 
             if (test_is_library(value_ptr, len))
@@ -3893,8 +3951,20 @@ int main(int argc, char *argv[])
                     force_src != force_none) {
                     char *bname;
 		    char *dname;
-		    bname = basename(strdup(value_ptr));
-		    dname = dirname(strdup(value_ptr));
+
+		    if (!process_stdin) {
+			bname = basename(strdup(value_ptr));
+			dname = dirname(strdup(value_ptr));
+		    } else {
+			dname = strdup(".");
+			if (typ == suffix_c) {
+			    bname = strdup("cc_stdin.c");
+			} else if (typ == suffix_cxx) {
+			    bname = strdup("cc_stdin.cxx");
+			} else {
+			    bname = strdup("cc_stdin.");
+			}
+		    }
 
 		    /* Several modules may need module specific hacks
 		     * in order to build correctly on VMS.  This
@@ -3961,6 +4031,14 @@ int main(int argc, char *argv[])
                     else
                         assert(0); /* should not happen */
 
+		    /*
+		     * Generate the obj module name using the actual stdin
+		     * file when processing stdin.
+		     */
+		    if (process_stdin) {
+			free(bname);
+			bname = basename(strdup(gnv_cc_stdin_file));
+		    }
                     append_last(&l_objfiles,
                                 new_suffix3(bname, default_obj_suffix));
 		    free(dname);
@@ -4156,6 +4234,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+
     /*
     ** Output goes to stderr as well as stdout if they are different.
     */
@@ -4183,6 +4262,34 @@ int main(int argc, char *argv[])
     if (status == -1) {
         perror("? pclose");
         exit(EXIT_FAILURE);
+    }
+
+    /*
+     * Remove the special source file used for processing stdin as well as the
+     * associated object module.
+     */
+    if (process_stdin) {
+	char *lastdot;
+	char *newfile;
+	int file_len;
+	file_len = strlen(gnv_cc_stdin_file);
+	newfile = malloc(file_len + 10);
+	strcpy(newfile, gnv_cc_stdin_file);
+	lastdot = strrchr(newfile, '.');
+	remove(gnv_cc_stdin_file);
+	if (lastdot != NULL) {
+	    if (linkx) {
+		strcpy(lastdot, default_obj_suffix);
+		remove(gnv_cc_stdin_file);
+	    } else {
+		char obj_name[1024];
+		obj_name[0] = 'a';
+		obj_name[1] = '\0';
+		strcat(obj_name, default_obj_suffix);
+		strcpy(lastdot, default_obj_suffix);
+		rename(gnv_cc_stdin_file, obj_name);
+	    }
+	}
     }
 
     if (preprocess)

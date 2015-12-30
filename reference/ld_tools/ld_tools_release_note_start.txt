@@ -283,6 +283,9 @@ Fixes and enhancements:
 
 ** Version 3.0.4
 
+*  The cc/c++ wrapper now supports "- " for source files from standard
+   input similar to GCC.
+
 *  Fixed issue where string defines were always being quoted.  Now string
    defines are only quoted when originally quoted.
 
