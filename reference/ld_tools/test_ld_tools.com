@@ -48,6 +48,7 @@ $ gosub compile_stdin
 $ if arch_code .nes. "V"
 $ then
 $   gosub compile_dot_in_directory
+$   gosub compile_dot_in_name
 $ endif
 $!
 $! STD tests
@@ -79,7 +80,6 @@ $!
 $! Quoted define
 $!----------------
 $ gosub quoted_define
-$!goto report
 $ gosub quoted_define2
 $ gosub numeric_define
 $ gosub string_define
@@ -208,8 +208,6 @@ $simple_compile:
 $ write sys$output "Simple Compile"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -226,8 +224,6 @@ $compile_root_log_dash_c_dash_o:
 $ write sys$output "Compile rooted logical -c -o"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "test_dash_o.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -253,8 +249,6 @@ $compile_log_dash_c_dash_o:
 $ write sys$output "Compile logical -c -o"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "test_dash_o.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -275,12 +269,13 @@ $ write sys$output "Compile stdin"
 $ test = test + 1
 $ file = "-"
 $ cfile = "-"
-$ cflags = "-xc"
+$ ofile = file + ".o"
 $ efile = "a.out"
+$ noexe = 1
+$ cflags = "-xc -c -o ''efile'"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
 $ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ out_file = ""
 $ gosub compile_driver
 $ return
@@ -290,8 +285,6 @@ $compile_dot_in_directory:
 $ write sys$output "Compile with dot in directory"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "[.dot^.in_dir]test_hello."
 $ cflags = "-o ./dot.in_dir/test_hello"
 $ lstfile = file + ".lis"
@@ -307,12 +300,33 @@ $set nover
 $ return
 $!
 $!
+$compile_dot_in_name:
+$ write sys$output "Compile with dot in filename"
+$ test = test + 1
+$ file = "test^.hello"
+$ gosub create_test_hello_c
+$ efile = "test.hello"
+$ cflags = "-o test.hello"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
+$ old_efs = f$trnlnm("DECC$EFS_CHARSET", "LNM$PROCESS_TABLE")
+$ if old_efs .nes. "" then deas decc$efs_charset
+$ define DECC$EFS_CHARSET disable
+$ gosub compile_driver
+$ deas decc$efs_charset
+$ if old_efs .nes. ""
+$ then
+$    define DECC$EFS_CHARSET 'old_efs'
+$ endif
+$ return
+$!
+$!
 $fstack_protector_compile:
 $ write sys$output "Compile -fstack-protector"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -327,8 +341,6 @@ $fvisibility_compile:
 $ write sys$output "Compile -fvisibility=hidden"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -344,8 +356,6 @@ $ write sys$output "Compile -fPIC"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -360,8 +370,6 @@ $std_c99_compile:
 $ write sys$output "Compile -std=c99"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -377,8 +385,6 @@ $std_c90_compile:
 $ write sys$output "Compile -std=c90"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -394,8 +400,6 @@ $std_gnu90_compile:
 $ write sys$output "Compile -std=gnu90"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -412,8 +416,6 @@ $strict_aliasing_compile:
 $ write sys$output "Compile -fstrict-aliasing"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -430,8 +432,6 @@ $no_strict_aliasing_compile:
 $ write sys$output "Compile -fno-strict-aliasing"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -448,8 +448,6 @@ $wall_compile:
 $ write sys$output "Compile -Wall"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -464,8 +462,6 @@ $wextra_compile:
 $ write sys$output "Compile -Wextra"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -480,8 +476,6 @@ $wl_as_needed_compile:
 $ write sys$output "Compile -Wl,-as-needed"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -497,8 +491,6 @@ $ write sys$output "Compile -Wl,-rpath"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -513,8 +505,6 @@ $wl_export_dyn_compile:
 $ write sys$output "Compile -Wl,-export-dynamic"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -530,8 +520,6 @@ $ write sys$output "Compile -Wl,-no-undefined"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -546,8 +534,6 @@ $wl_version_compile:
 $ write sys$output "Compile -Wl,--version-script"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -562,8 +548,6 @@ $pedantic_compile:
 $ write sys$output "Compile -pedantic"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -579,8 +563,6 @@ $!set ver
 $ write sys$output "Compile quoted define"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -599,8 +581,6 @@ $ write sys$output "Compile quoted define2"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -616,8 +596,6 @@ $numeric_define:
 $ write sys$output "Compile numeric define"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -633,8 +611,6 @@ $string_define:
 $ write sys$output "Compile string define"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -650,8 +626,6 @@ $missing_objects:
 $ write sys$output "Compile missing objects"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -669,8 +643,6 @@ $missing_shared_images:
 $ write sys$output "Compile missing shared images"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -688,8 +660,6 @@ $missing_library:
 $ write sys$output "Compile missing library"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "a.out"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -709,8 +679,6 @@ $ write sys$output "Compile cc_command_file"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "test_hello.o"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
@@ -734,18 +702,18 @@ $ld_gnv_shared_logical:
 $ write sys$output "Compile ld gnv_shared_logical"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "test_hello.exe"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
 $ dsffile = file + ".dsf"
 $ ofile = file + ".o"
-$ cc/object=test_hello_shr.o test_hello.c
+$ cc/object=test_hello_shr.o 'cfile'
 $ link/share=test_hello_shr.exe test_hello_shr.o
 $ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
 $ cflags = "-o test_hello.exe -ltest_hello_shr"
 $ gosub compile_driver
+$ obj_file = file + "_shr.o"
+$ if f$search(obj_file) .nes. "" then delete 'obj_file';*
 $ exe_shr1 = file + "_shr.exe"
 $ if f$search(exe_shr1) .nes. "" then delete 'exe_shr1';*
 $ map_shr1 = file + "_shr.map"
@@ -759,18 +727,18 @@ $ld_gnv_shared_logical2:
 $ write sys$output "Compile ld gnv_shared_logical2"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ file = "test_hello"
-$ cfile = file + ".c"
 $ efile = "test_hello.exe"
 $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
 $ dsffile = file + ".dsf"
 $ ofile = file + ".o"
-$ cc/object=test_hello_shr.o test_hello.c
+$ cc/object=test_hello_shr.o 'cfile'
 $ link/share=test_hello_shr.exe test_hello_shr.o
 $ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
 $ cflags = "-o test_hello.exe libtest_hello_shr.a"
 $ gosub compile_driver
+$ obj_file = file + "_shr.o"
+$ if f$search(obj_file) .nes. "" then delete 'obj_file';*
 $ exe_shr1 = file + "_shr.exe"
 $ if f$search(exe_shr1) .nes. "" then delete 'exe_shr1';*
 $ map_shr1 = file + "_shr.map"
@@ -786,8 +754,9 @@ $compile_driver:
 $! on warning then set ver
 $ if f$type(noexe) .eqs. "" then noexe = 0
 $ cmd_symbol = test_cc_cmd
+$ unix_c_file = cfile - "^"
 $ if cflags .nes. "" then cmd_symbol = cmd_symbol + " " + cflags
-$ if cfile .nes. "" then cmd_symbol = cmd_symbol  + " " + cfile
+$ if unix_c_file .nes. "" then cmd_symbol = cmd_symbol  + " " + unix_c_file
 $ if more_files .nes. "" then cmd_symbol = cmd_symbol + " " + more_files
 $ cmd_symbol = f$edit(cmd_symbol, "trim")
 $ write sys$output "  command: """, cmd_symbol, """"
@@ -803,6 +772,16 @@ $   if cc_out_file .nes. "" then define/user sys$output 'cc_out_file'
 $   execv 'test_cc' cmd_symbol
 $ endif
 $ cc_status = '$status' .and. (.not. %x10000000)
+$ gnv_temp_file = f$search("gnv$cc_stdin_*.*")
+$ if gnv_temp_file .nes. ""
+$ then
+$set ver
+$   write sys$output "** ''gnv_temp_file' temp file left behind."
+$   lcl_fail = lcl_fail + 1
+$   dir gnv$cc_stdin*.*
+$   del gnv$cc_stdin_*.*;*
+$set nover
+$ endif
 $ if cc_status .ne. expect_cc_status
 $ then
 $   show log sys$output
@@ -933,11 +912,14 @@ $
 $ if lcl_fail .ne. 0 then fail = fail + 1
 $ set nover
 $ ! cleanup
+$ gosub test_clean_up
 $ gosub clean_params
 $ return
 $!
 $clean_params:
 $ cmd = ld_cmd
+$ file = "test_hello"
+$ cfile = file + ".c"
 $ more_files = ""
 $ expect_cc_out = ""
 $ out_file = "test_cc_prog.out"
@@ -958,15 +940,14 @@ $ return
 $!
 $test_clean_up:
 $ noexe = 1
-$ file = "test_hello.c"
-$ if f$search(file) .nes. "" then delete 'file';
+$ if f$search(cfile) .nes. "" then delete 'cfile';
 $ return
 $!
 $! Create a test file
 $create_test_hello_c:
-$ file = "test_hello.c"
-$ if f$search(file) .nes. "" then delete 'file';
-$ create 'file'
+$ cfile = file + ".c"
+$ if f$search(cfile) .nes. "" then delete 'cfile';
+$ create 'cfile'
 #include <stdio.h>
 
 int main(int argc, char **argv) {

@@ -1,4 +1,4 @@
-$! File: gnv$ld_tool_Startup.com / gnv_ld_tool_startup.com
+$! File: gnv$ld_tools_Startup.com / gnv_ld_tools_startup.com
 $!
 $! Procedure to setup the LD_TOOL images for use by programs from the
 $! VMS SYSTARTUP*.COM procedure.
@@ -7,7 +7,7 @@ $! 14-Mar-2011 J. Malmberg
 $! 04-May-2011 J. Malmberg      Use GNV_PCSI_DESTINATION to find the
 $!                              value to assing GNV$GNU per suggestion
 $!                              by Martin Vorlander.
-$! 24-Jan-2014 J. Malmberg	Ld_tool Version
+$! 24-Jan-2014 J. Malmberg	Ld_tools Version
 $!========================================================================
 $!
 $!

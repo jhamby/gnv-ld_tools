@@ -1,10 +1,10 @@
 From file: ld_tools_release_note_start.com
 
-This is tool to provide a wrapper around LD and the C/C++ compilers to
-translate the syntax from UNIX syntax to VMS syntax.
+This is tool to provide a wrapper around the VMS Linker and the C/C++
+compilers to translate the syntax from UNIX syntax to VMS syntax.
 
-The C/C++ compiler links are only installed if the compilers are installed
-on the system.
+The C/C++ compiler alias links are only installed if the compilers are
+installed on the system.
 
 If the compilers are installed after the this kit is installed, then
 run the GNV$GNU:[vms_bin]ld_tools_alias_setup.com
@@ -282,6 +282,17 @@ Some examples:
 Fixes and enhancements:
 
 ** Version 3.0.4
+
+*  The following logical names are now set in the child process so that
+   the C and C++ compilers interpret Unix filenames the same as the
+   rest of GNV.
+
+   decc$arg_parse_style          ENABLE
+   decc$disable_posix_root       DISABLE
+   decc$efs_charset              ENABLE
+   decc$readdir_dropdotnotype    ENABLE
+   decc$unix_path_before_logname ENABLE
+   decc$filename_unix_no_version ENABLE
 
 *  The cc/c++ wrapper now supports "- " for source files from standard
    input similar to GCC.

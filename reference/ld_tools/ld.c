@@ -427,10 +427,10 @@ Modification history:
 		* Do not quote definitions unless they are already
 		  quoted.
 		* Fix program name setting for VAX.
-
-	67	John E. Malmberg
 		* Added support for input from stdin from
 		  Eric Robertson of IQware.
+		* Replicate selected C feature settings to be logical
+		  name as they affect the C/C++ compilers.
 */
 
 #include <assert.h>
@@ -451,8 +451,10 @@ Modification history:
 #include <gen64def.h>
 #endif
 #define sys$trnlnm hide_sys$trnlnm
+#define sys$crelnm hide_sys$crelnm
 #include <starlet.h>
 #undef sys$trnlnm
+#undef sys$crelnm
 #include <ssdef.h>
 #include <eobjrecdef.h>
 #include <egsydef.h>
@@ -493,7 +495,12 @@ int   SYS$TRNLNM(
 	struct dsc$descriptor_s * name_dsc,
 	const unsigned char * acmode,
 	const struct itmlst_3 * item_list);
-
+int   SYS$CRELNM(
+	const unsigned long * attr,
+	const struct dsc$descriptor_s * table_dsc,
+	const struct dsc$descriptor_s * name_dsc,
+	const unsigned char * acmode,
+	const struct itmlst_3 * item_list);
 
 #define append_last(__arglist_ptr, __str) \
     append_list(&(__arglist_ptr)->last, (__str))
@@ -809,6 +816,40 @@ static int sys_trnlnm
     }
 
     return status;
+}
+
+/* How to simply create a logical name */
+static int sys_crelnm
+   (const char * logname,
+    const char * value)
+{
+    int ret_val;
+    const char * proc_table = "LNM$PROCESS_TABLE";
+    struct dsc$descriptor_s proc_table_dsc;
+    struct dsc$descriptor_s logname_dsc;
+    struct itmlst_3 item_list[2];
+
+    proc_table_dsc.dsc$a_pointer = (char *) proc_table;
+    proc_table_dsc.dsc$w_length = strlen(proc_table);
+    proc_table_dsc.dsc$b_dtype = DSC$K_DTYPE_T;
+    proc_table_dsc.dsc$b_class = DSC$K_CLASS_S;
+
+    logname_dsc.dsc$a_pointer = (char *) logname;
+    logname_dsc.dsc$w_length = strlen(logname);
+    logname_dsc.dsc$b_dtype = DSC$K_DTYPE_T;
+    logname_dsc.dsc$b_class = DSC$K_CLASS_S;
+
+    item_list[0].buflen = strlen(value);
+    item_list[0].itmcode = LNM$_STRING;
+    item_list[0].bufadr = (char *)value;
+    item_list[0].retlen = NULL;
+
+    item_list[1].buflen = 0;
+    item_list[1].itmcode = 0;
+
+    ret_val = SYS$CRELNM(NULL, &proc_table_dsc, &logname_dsc, NULL, item_list);
+
+    return ret_val;
 }
 
 /*
@@ -3175,6 +3216,14 @@ int main(int argc, char *argv[])
     char *p;
     char *suffix;
     int posix_compliant_pathnames;
+
+    /* Replicate these settings to C/C++ compilers */
+    sys_crelnm("DECC$ARGV_PARSE_STYLE", "ENABLE");
+    sys_crelnm("DECC$DISABLE_POSIX_ROOT", "DISABLE");
+    sys_crelnm("DECC$EFS_CHARSET", "ENABLE");
+    sys_crelnm("DECC$READDIR_DROPDOTNOTYPE", "ENABLE");
+    sys_crelnm("DECC$UNIX_PATH_BEFORE_LOGNAME", "ENABLE");
+    sys_crelnm("DECC$FILENAME_UNIX_NO_VERSION", "ENABLE");
 
     gnv_cc_debug	= enabled("GNV_CC_DEBUG");
     gnv_crtl_sup	= enabled("GNV_CRTL_SUP");
