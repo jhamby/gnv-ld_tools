@@ -56,7 +56,7 @@ _X_ARG( "-print-search-dirs"    , control, noval, p_searchdirs  , ""  , unsup ),
 _X_ARG( "print-search-dirs"     , control, noval, p_searchdirs  , ""  , unsup ),
 _X_ARG( "Q"		        , control, noval, help_opt      , 0  , unsup ),
 _X_ARG( "spike"			, control, noval, 0		, 0  , deprec ),
-_X_ARG( "v"  		        , control, noval, verbose       , 0  , active ),
+_X_ARG( "v"  		        , control, noval, verbose       , "" , active ),
 _X_ARG( "x"			, control, val	, compile_type	, "" , ignore ),
 
 /*
@@ -117,7 +117,7 @@ _X_ARG( "fptm" 		, compile, val	, lookup,
                             "|n=/IEEE=FAS|u=/IEEE=INEX"             , deprec ),
 _X_ARG( "fPIC"		, compile, noval, 0           , 0           , ignore ),
 _X_ARG( "framepointer"	, compile, noval, 0	      , 0           , unknown ),
-_X_ARG( "fsyntax-only"  , compile, noval, 0           , 0           , unsup ),
+_X_ARG( "fsyntax-only"  , compile, noval, noobject    , "/NOOBJECT" , active ),
 _X_ARG( "fstack"	, compile, xval,  0           , 0           , unsup ),
 _X_ARG( "fmax-errors="  , compile, xval,  0           , 0           , unsup ),
 #ifndef __VAX

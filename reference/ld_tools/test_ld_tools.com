@@ -16,8 +16,11 @@ $   test_cc_cmd = "/bin/cc"
 $   ld = "gnv$gnu:[bin]ld.exe"
 $   ld_cmd = "/bin/ld"
 $ endif
-$! test_cc = "sys$disk:[]gnv$ld.exe"
-$! test_cc_cmd = "./ld"
+$ if p1 .eqs. "DEBUG"
+$ then
+$    test_cc = "sys$disk:[]gnv$debug-ld.exe"
+$    test_cc_cmd = "./cc"
+$ endif
 $ execv := $sys$disk:[]execv_symbol.exe
 $!
 $ arch_type = f$getsyi("ARCH_NAME")
@@ -42,6 +45,7 @@ $!
 $! Simple CC tests
 $!---------------
 $ gosub simple_compile
+$ gosub compile_fsyntax_only
 $ gosub compile_root_log_dash_c_dash_o
 $ gosub compile_log_dash_c_dash_o
 $ gosub compile_stdin
@@ -213,6 +217,22 @@ $ lstfile = file + ".lis"
 $ mapfile = file + ".map"
 $ dsffile = file + ".dsf"
 $ ofile = file + ".o"
+$ gosub compile_driver
+$ return
+$!
+$!
+$compile_fsyntax_only:
+$ write sys$output "Compile fsyntax-only"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ efile = "a.out"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
+$ cflags = "-fsyntax-only"
+$ noexe = 1
+$ no_efile = 1
 $ gosub compile_driver
 $ return
 $!
@@ -775,16 +795,13 @@ $ cc_status = '$status' .and. (.not. %x10000000)
 $ gnv_temp_file = f$search("gnv$cc_stdin_*.*")
 $ if gnv_temp_file .nes. ""
 $ then
-$set ver
 $   write sys$output "** ''gnv_temp_file' temp file left behind."
 $   lcl_fail = lcl_fail + 1
 $   dir gnv$cc_stdin*.*
 $   del gnv$cc_stdin_*.*;*
-$set nover
 $ endif
 $ if cc_status .ne. expect_cc_status
 $ then
-$   show log sys$output
 $   write sys$output "  ** CC status ''cc_status' is not ''expect_cc_status'!"
 $   lcl_fail = lcl_fail + 1
 $ endif
@@ -805,6 +822,10 @@ $ if cc_out_file .nes. ""
 $ then
 $   if f$search(cc_out_file) .nes. ""
 $   then
+$       if p1 .eqs. "DEBUG"
+$       then
+$           type 'cc_out_file'
+$       endif
 $       open/read xx 'cc_out_file'
 $       line_in = ""
 $       read/end=read_xx1 xx line_in
@@ -858,9 +879,9 @@ $ if (cc_status .and. %x35a000) .eq. %x35a000
 $ then
 $    unix_status = (cc_status / 8) .and. 255
 $ endif
-$ if  f$search(efile) .eqs. ""
+$ if f$search(efile) .eqs. ""
 $ then
-$    if unix_status .eq. 0
+$    if unix_status .eq. 0 .and. no_efile .eq. 0
 $    then
 $        write sys$output "  ** Executable not produced!"
 $        lcl_fail = lcl_fail + 1
@@ -902,6 +923,11 @@ $               lcl_fail = lcl_fail + 1
 $           endif
 $       endif
 $   endif
+$   if no_efile
+$   then
+$       write sys$output "Object produced when none expected"
+$       lcl_fail = lcl_fail + 1
+$   endif
 $   delete 'efile';*
 $ endif
 $ if f$search(ofile) .nes. "" then delete 'ofile';*
@@ -934,6 +960,7 @@ $ efile = "a.out"
 $ cflags = ""
 $ expect_cc_out = ""
 $ noexe = 0
+$ no_efile = 0
 $ expect_prog_out = "Hello World"
 $ search_listing = ""
 $ return

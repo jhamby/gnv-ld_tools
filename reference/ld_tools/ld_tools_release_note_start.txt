@@ -351,16 +351,19 @@ Fixes and enhancements:
 * -w now inhibits all warnings to be compatible with GCC use.
   Previously it enabled warnings to level 3.
 
+* -v now prints out the version information when not used with -h.
+
 * -Wall is mapped to /WARN=(WARN=(OVERFLOW, LEVEL3))
 
 * -Wextra is mapped to /WARN=(WARN=(ALL))
 
 * -Wpendantic and -pedantic-errors settings are now ignored.
 
+* -fsyntax-only is mapped to /noobject
+
 * Added unsupported options to internal table for possible future
   implementation once someone figures out how to map them.
   -fstack*
-  -fsyntax-only
   -fmax-errors=n
   -fno-xxx
   -fvisibility=xxx

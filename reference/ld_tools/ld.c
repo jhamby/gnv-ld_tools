@@ -678,6 +678,7 @@ int linkx = 1;
 int sharedx = 0;
 int auto_symvecx = 0;
 int linker_symvecx = 0;
+int no_object = 0;
 int objfile = 0;
 char *outfile = 0;
 int link_incr = 0;
@@ -2598,7 +2599,9 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
     if (files_list) {
         /* Specify the output file */
         if (!preprocess) {
-            if (outfile && !linkx) {
+            if (no_object == 1) {
+                fprintf(fp, "/noobject -\n");
+            } else if (outfile && !linkx) {
                 fprintf(fp, "/object=%s -\n", unix_to_vms(outfile, FALSE));
             } else {
                 fprintf(fp, "/object=%s -\n",
@@ -3674,6 +3677,7 @@ int main(int argc, char *argv[])
 
                 case X_verbose:
                     verbose = 1;
+		    version = 1;
                     add_option = 0;
 		    preprocess = 0;
 		    linkx = 0;
@@ -3733,6 +3737,7 @@ int main(int argc, char *argv[])
 		    preprocess = 0;
 		    linkx = 0;
 		    objfile = 0;
+		    no_object = 1;
 		    mms_dep_file = 1;
 		    break;
 
@@ -3750,6 +3755,7 @@ int main(int argc, char *argv[])
 		case X_noobject:
 		    linkx = 0;
 		    objfile = 0;
+		    no_object = 1;
 		    break;
 
 		case X_retain:
@@ -4172,7 +4178,7 @@ int main(int argc, char *argv[])
 	return 0;
     }
 
-    if (version) {
+    if (verbose || version) {
         char * argv0_copy;
         switch (version) {
         case 2:
