@@ -70,109 +70,121 @@ char * get_symbol(const char * name) {
 #define MAX_ARGS 1024
 #define MAX_SIZE 1024
 
+void expand_symbol(char **array, const char * symbol) {
+
+    int i = 0;
+    int j = 0;
+    int ac = 0;
+    int ws = 1;
+    int quote = 0;
+    char * symbol_str;
+
+    symbol_str = get_symbol(symbol);
+    if (symbol_str == NULL) {
+        printf("Unable to get SYMBOL %s value.\n", symbol);
+        exit(2);
+    }
+
+    array[ac] = malloc(MAX_SIZE + 1); /* Max EXE path */
+    array[ac+1] = NULL;
+    while (symbol_str[i] != 0) {
+        array[ac][j] = 0;
+        switch(symbol_str[i]) {
+        case ' ':
+        case '\t':
+            /* Parameter delimeter unless quoted */
+            if (quote != 0) {
+                array[ac][j] = symbol_str[i];
+                j++;
+                break;
+            }
+            if (ws != 1) {
+                j = 0;
+                ac++;
+                if (ac == MAX_ARGS) {
+                    break;
+                }
+                array[ac] = malloc(MAX_SIZE);
+                array[ac + 1] = NULL;
+                ws = 1;
+            }
+            break;
+        case '\'':
+        case '"':
+            ws = 0;
+            if (symbol_str[i] == quote) {
+                /* No nesting of quotes in test harness */
+                quote = 0;
+            } else {
+                quote = symbol_str[i];
+            }
+            array[ac][j] = symbol_str[i];
+            j++;
+            break;
+        case '\\':
+            /* Ignore escapes in single quotes */
+            ws = 0;
+            if (quote == '\'') {
+                array[ac][j] = symbol_str[i];
+                j++;
+                break;
+            }
+            i++;
+            switch(symbol_str[i] == 0) {
+            case 0:
+                break;
+            case 'n':
+                array[ac][j] == '\n';
+                j++;
+                break;
+            case 'r':
+                array[ac][j] == '\r';
+                j++;
+                break;
+            case 't':
+                array[ac][j] == '\t';
+                j++;
+                break;
+            default:
+                array[ac][j] == symbol_str[i];
+                j++;
+            }
+            break;
+
+        default:
+            array[ac][j] = symbol_str[i];
+            ws = 0;
+            j++;
+        }
+        if (j == MAX_SIZE) {
+            /* error for this test harness */
+            array[ac][MAX_SIZE] = 0;
+            break;
+        }
+        i++;
+    }
+}
+
 int main(int argc, char ** argv) {
    int status;
    char *new_argv[MAX_ARGS + 1];  /* Big enough */
-   char * symbol_str;
+   char *new_env[MAX_ARGS + 1];  /* Big enough */
 
-   if (argc != 3) {
-       puts("usage:  execv VMS-EXE DCL-SYMBOL-NAME");
+   if (argc < 3) {
+       puts("usage:  execv VMS-EXE DCL-SYMBOL-NAME1 [DCL-SYMBOL_NAME2]");
+       puts("    DCL-SYMBOL-NAME1 is Unix command line.");
+       puts("    DCL-SYMBOL-NAME2 is space delimited environment list");
        exit(1);
    }
 
-   symbol_str = get_symbol(argv[2]);
-   if (symbol_str == NULL) {
-       puts("Unable to get SYMBOL name value.");
-       exit(2);
+   expand_symbol(new_argv, argv[2]);
+
+   if (argc == 4) {
+       expand_symbol(new_env, argv[3]);
+       status = execve(argv[1], new_argv, new_env);
+   } else {
+       status = execv(argv[1], new_argv);
    }
-
-   {
-       int i = 0;
-       int j = 0;
-       int ac = 0;
-       int ws = 1;
-       int quote = 0;
-       new_argv[ac] = malloc(MAX_SIZE + 1); /* Max EXE path */
-       new_argv[ac+1] = NULL;
-       while (symbol_str[i] != 0) {
-           new_argv[ac][j] = 0;
-           switch(symbol_str[i]) {
-           case ' ':
-           case '\t':
-               /* Parameter delimeter unless quoted */
-               if (quote != 0) {
-                   new_argv[ac][j] = symbol_str[i];
-                   j++;
-                   break;
-               }
-               if (ws != 1) {
-                   j = 0;
-                   ac++;
-                   if (ac == MAX_ARGS) {
-                       break;
-                   }
-                   new_argv[ac] = malloc(MAX_SIZE);
-                   new_argv[ac + 1] = NULL;
-                   ws = 1;
-               }
-               break;
-           case '\'':
-           case '"':
-               ws = 0;
-               if (symbol_str[i] == quote) {
-                   /* No nesting of quotes in test harness */
-                   quote = 0;
-               } else {
-                   quote = symbol_str[i];
-               }
-               new_argv[ac][j] = symbol_str[i];
-               j++;
-               break;
-           case '\\':
-               /* Ignore escapes in single quotes */
-               ws = 0;
-               if (quote == '\'') {
-                   new_argv[ac][j] = symbol_str[i];
-                   j++;
-                   break;
-               }
-               i++;
-               switch(symbol_str[i] == 0) {
-               case 0:
-                   break;
-               case 'n':
-                   new_argv[ac][j] == '\n';
-                   j++;
-                   break;
-               case 'r':
-                   new_argv[ac][j] == '\r';
-                   j++;
-                   break;
-               case 't':
-                   new_argv[ac][j] == '\t';
-                   j++;
-                   break;
-               default:
-                   new_argv[ac][j] == symbol_str[i];
-                   j++;
-               }
-               break;
-
-           default:
-               new_argv[ac][j] = symbol_str[i];
-               ws = 0;
-               j++;
-           }
-           if (j == MAX_SIZE) {
-               /* error for this test harness */
-               new_argv[ac][MAX_SIZE] = 0;
-               break;
-           }
-           i++;
-       }
-   }
-
-   status = execv(argv[1], new_argv);
 
    exit(status);
 }

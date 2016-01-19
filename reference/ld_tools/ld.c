@@ -566,14 +566,17 @@ typedef enum {
     X_warn
 } rule_t;
 
-/* Unknown and depreciated options will be removed in the future
+/* Unknown and deprecated options may be removed in the future if they
+   are found to conflict with documented behavior.
    Badimp behavior should not be depended on in the future.
  */
 typedef enum {
     X_ignore,    /* Silently ignore this option */
     X_active,    /* This is an active option */
+    X_tru64,     /* This is an active tru64 option */
     X_unknown,   /* Unknown option - no documentation found - warn */
     X_unsup,     /* Option is unsupported - warn about it */
+    X_t64usup,   /* Tru64 unsupported option - warn about it. */
     X_deprec,    /* This is not a cc/ld option and will be removed in future */
     X_badimp,    /* This not implemented as expected */
     X_conflict,  /* This conflicts with cc/ld option */
@@ -1571,7 +1574,8 @@ void output_help( void)
 	case X_retain:
 	    break;
 	case X_rpath:
-	    text = "Path to search for shared images - Not implmented.";
+	    text = "Path to search for shared images - Not implemented.";
+	    val_with_text = FALSE;
 	    break;
 	case X_shared:
 	    break;
@@ -1639,6 +1643,10 @@ void output_help( void)
             /* This is an active option */
             support = "";
             break;
+        case X_tru64:
+            /* This is an active option */
+            support = "Tru64";
+            break;
         case X_unknown:
             /* Unknown option - no documentation found - warn */
             support = "Unknown";
@@ -1647,9 +1655,13 @@ void output_help( void)
             /* Option is unsupported - warn about it */
             support = "Unsupported";
             break;
+        case X_t64usup:
+            /* Option is unsupported - warn about it */
+            support = "Tru64 Unsupported";
+            break;
         case X_deprec:
-            /* This is not a cc/ld option and will be removed in future */
-            support = "Depreciated";
+            /* This is not a known cc/ld option and may be removed in future */
+            support = "Deprecated";
             break;
         case X_badimp:
             /* This not implemented as expected */
@@ -3405,7 +3417,7 @@ int main(int argc, char *argv[])
 		} else if (!strncmp(&command_line[j], "cxx", 3)) {
 		    j = j+3;
 		    force_src = force_cxx;
-		    errmsg("Depreciated, use -x c++ instead.");
+		    errmsg("Deprecated, use -x c++ instead.");
 		} else if (!strncmp(&command_line[j], "c", 1) &&
 			   ((command_line[j+1] == 0) ||
 			    (command_line[j+1] == ' '))) {

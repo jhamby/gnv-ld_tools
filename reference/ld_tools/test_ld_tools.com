@@ -79,6 +79,11 @@ $ gosub wl_rpath_compile
 $ gosub wl_export_dyn_compile
 $ gosub wl_no_undef_compile
 $ gosub wl_version_compile
+$ gosub wl_expect_unresolved
+$ gosub wl_update_registry
+$ gosub wl_soname
+$ gosub wl_hidden
+$ gosub wl_input
 $ gosub pedantic_compile
 $!
 $! Quoted define
@@ -87,6 +92,10 @@ $ gosub quoted_define
 $ gosub quoted_define2
 $ gosub numeric_define
 $ gosub string_define
+$!
+$! gnv$xxx.* files
+$!----------------
+$ gosub ld_auto_opt_file
 $!
 $! Missing objects/images
 $ if arch_code .nes. "V"
@@ -212,11 +221,6 @@ $simple_compile:
 $ write sys$output "Simple Compile"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ gosub compile_driver
 $ return
 $!
@@ -225,11 +229,6 @@ $compile_fsyntax_only:
 $ write sys$output "Compile fsyntax-only"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-fsyntax-only"
 $ noexe = 1
 $ no_efile = 1
@@ -245,10 +244,6 @@ $ write sys$output "Compile rooted logical -c -o"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_dash_o.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ my_default = f$environment("default")
 $ my_dev = f$parse(my_default,,,"device")
 $ my_dir = f$parse(my_default,,,"directory") - "[" - "]" - "<" - ">"
@@ -270,10 +265,6 @@ $ write sys$output "Compile logical -c -o"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_dash_o.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ my_default = f$environment("default")
 $ test_log = "test_''pid'_log"
 $ cflags = "-c -o /''test_log'/''efile'"
@@ -293,9 +284,6 @@ $ ofile = file + ".o"
 $ efile = "a.out"
 $ noexe = 1
 $ cflags = "-xc -c -o ''efile'"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
 $ out_file = ""
 $ gosub compile_driver
 $ return
@@ -307,10 +295,6 @@ $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "[.dot^.in_dir]test_hello."
 $ cflags = "-o ./dot.in_dir/test_hello"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ create/dir sys$disk:[.dot^.in_dir]/prot=o:rwed"
 $ gosub compile_driver
 $ dfile = "sys$disk:[.dot^.in_dir]*.*;*"
@@ -327,10 +311,6 @@ $ file = "test^.hello"
 $ gosub create_test_hello_c
 $ efile = "test.hello"
 $ cflags = "-o test.hello"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ old_efs = f$trnlnm("DECC$EFS_CHARSET", "LNM$PROCESS_TABLE")
 $ if old_efs .nes. "" then deas decc$efs_charset
 $ define DECC$EFS_CHARSET disable
@@ -347,11 +327,6 @@ $fstack_protector_compile:
 $ write sys$output "Compile -fstack-protector"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-fstack-protector"
 $ gosub compile_driver
 $ return
@@ -361,11 +336,6 @@ $fvisibility_compile:
 $ write sys$output "Compile -fvisibility=hidden"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-fvisibility=hidden"
 $ gosub compile_driver
 $ return
@@ -376,11 +346,6 @@ $ write sys$output "Compile -fPIC"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-fPIC"
 $ gosub compile_driver
 $ return
@@ -390,11 +355,6 @@ $std_c99_compile:
 $ write sys$output "Compile -std=c99"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-std=c99"
 $ search_listing = "__STDC__=1"
 $ gosub compile_driver
@@ -405,11 +365,6 @@ $std_c90_compile:
 $ write sys$output "Compile -std=c90"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-std=c99"
 $ search_listing = "__STDC__=1"
 $ gosub compile_driver
@@ -420,11 +375,6 @@ $std_gnu90_compile:
 $ write sys$output "Compile -std=gnu90"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-std=gnu90"
 $ search_listing = "__STDC__=2"
 $ expect_uopt = 1
@@ -436,11 +386,6 @@ $strict_aliasing_compile:
 $ write sys$output "Compile -fstrict-aliasing"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-fstrict-aliasing"
 $ search_listing = ""
 $ expect_uopt = 1
@@ -452,11 +397,6 @@ $no_strict_aliasing_compile:
 $ write sys$output "Compile -fno-strict-aliasing"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-fno-strict-aliasing"
 $ search_listing = ""
 $ expect_uopt = 1
@@ -468,11 +408,6 @@ $wall_compile:
 $ write sys$output "Compile -Wall"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-Wall"
 $ gosub compile_driver
 $ return
@@ -482,11 +417,6 @@ $wextra_compile:
 $ write sys$output "Compile -Wextra"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-Wextra"
 $ gosub compile_driver
 $ return
@@ -496,11 +426,6 @@ $wl_as_needed_compile:
 $ write sys$output "Compile -Wl,-as-needed"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-Wl,-as-needed"
 $ gosub compile_driver
 $ return
@@ -511,11 +436,6 @@ $ write sys$output "Compile -Wl,-rpath"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-Wl,-rpath=."
 $ gosub compile_driver
 $ return
@@ -525,11 +445,6 @@ $wl_export_dyn_compile:
 $ write sys$output "Compile -Wl,-export-dynamic"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-Wl,-export-dynamic"
 $ gosub compile_driver
 $ return
@@ -540,11 +455,6 @@ $ write sys$output "Compile -Wl,-no-undefined"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-Wl,-no-undefined"
 $ gosub compile_driver
 $ return
@@ -554,12 +464,52 @@ $wl_version_compile:
 $ write sys$output "Compile -Wl,--version-script"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-Wl,--version-script"
+$ gosub compile_driver
+$ return
+$!
+$!
+$wl_expect_unresolved:
+$ write sys$output "Compile -Wl,-expect_unresolved '-Wl,*'"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ cflags = "-Wl,-expect_unresolved '-Wl,*'"
+$ gosub compile_driver
+$ return
+$!
+$!
+$wl_update_registry:
+$ write sys$output "Compile -Wl,-update_registry -Wl,../../so_locations"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ cflags = "-Wl,-update_registry -Wl,../../so_locations"
+$ gosub compile_driver
+$ return
+$!
+$!
+$wl_soname:
+$ write sys$output "Compile -Wl,-soname -Wl,libkrb5support.so.0"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ cflags = "-Wl,-soname -Wl,libkrb5support.so.0"
+$ gosub compile_driver
+$ return
+$!
+$!
+$wl_hidden:
+$ write sys$output "Compile -Wl,-hidden"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ cflags = "-Wl,-hidden"
+$ gosub compile_driver
+$ return
+$!
+$!
+$wl_input:
+$ write sys$output "Compile -Wl,-input,osf1.exports"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ cflags = "-Wl,-input,osf1.exports"
 $ gosub compile_driver
 $ return
 $!
@@ -568,11 +518,6 @@ $pedantic_compile:
 $ write sys$output "Compile -pedantic"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-pedantic"
 $ gosub compile_driver
 $ return
@@ -583,11 +528,6 @@ $!set ver
 $ write sys$output "Compile quoted define"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-DTEST_DEFINE=""foo bar"""
 $ expect_prog_out = "foo bar"
 $ gosub compile_driver
@@ -601,11 +541,6 @@ $ write sys$output "Compile quoted define2"
 $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-DNDEBUG -DPy_BUILD_CORE -DABIFLAGS=""M"""
 $ expect_prog_out = "flags=M"
 $ gosub compile_driver
@@ -616,11 +551,6 @@ $numeric_define:
 $ write sys$output "Compile numeric define"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-DTest_NDEFINE=0x03500"
 $ expect_prog_out = "13568"
 $ gosub compile_driver
@@ -631,14 +561,32 @@ $string_define:
 $ write sys$output "Compile string define"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-DTEST_TXT_DEFINE=puts"
 $ expect_prog_out = "Hello World!"
 $ gosub compile_driver
+$ return
+$!
+$!
+$ld_auto_opt_file:
+$ write sys$output "LD with gnv$<xxx>.opt file"
+$ test = test + 1
+$ gosub create_hello_sub_c
+$ cc hello_sub
+$ gosub create_test_hello_c
+$ efile = file
+$ create gnv$'file'.opt
+sys$disk:[]hello_sub.obj
+$ cflags = "-DTEST_TXT_DEFINE=hello_sub -o ''efile'"
+$ options = "GNV_OPT_DIR=."
+$ gosub compile_driver
+$ dfile = "hello_sub.obj"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "hello_sub.lis"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "hello_sub.c"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "gnv$''file'.opt"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
 $ return
 $!
 $!
@@ -646,11 +594,6 @@ $missing_objects:
 $ write sys$output "Compile missing objects"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ more_files = "missing.o"
 $ expect_uf = 1
 $ cflags = ""
@@ -663,11 +606,6 @@ $missing_shared_images:
 $ write sys$output "Compile missing shared images"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ more_files = "missing.so"
 $ expect_uf = 1
 $ cflags = ""
@@ -680,11 +618,6 @@ $missing_library:
 $ write sys$output "Compile missing library"
 $ test = test + 1
 $ gosub create_test_hello_c
-$ efile = "a.out"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ more_files = "missing.a"
 $ expect_uf = 1
 $ cflags = ""
@@ -700,10 +633,6 @@ $ test = test + 1
 $ lcl_fail = 0
 $ gosub create_test_hello_c
 $ efile = "test_hello.o"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cflags = "-o test_hello.o"
 $ expect_cc_out = "test gnv$test_hello_cc.com"
 $ cc_cmd_file = "gnv$test_hello_cc.com"
@@ -723,10 +652,6 @@ $ write sys$output "Compile ld gnv_shared_logical"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_hello.exe"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cc/object=test_hello_shr.o 'cfile'
 $ link/share=test_hello_shr.exe test_hello_shr.o
 $ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
@@ -748,10 +673,6 @@ $ write sys$output "Compile ld gnv_shared_logical2"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_hello.exe"
-$ lstfile = file + ".lis"
-$ mapfile = file + ".map"
-$ dsffile = file + ".dsf"
-$ ofile = file + ".o"
 $ cc/object=test_hello_shr.o 'cfile'
 $ link/share=test_hello_shr.exe test_hello_shr.o
 $ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
@@ -789,7 +710,12 @@ $   pipe write sys$output simple_c -
 | execv 'test_cc' cmd_symbol
 $ else
 $   if cc_out_file .nes. "" then define/user sys$output 'cc_out_file'
-$   execv 'test_cc' cmd_symbol
+$   if options .nes. ""
+$   then
+$       execv 'test_cc' cmd_symbol options
+$   else
+$       execv 'test_cc' cmd_symbol
+$   endif
 $ endif
 $ cc_status = '$status' .and. (.not. %x10000000)
 $ gnv_temp_file = f$search("gnv$cc_stdin_*.*")
@@ -946,6 +872,10 @@ $clean_params:
 $ cmd = ld_cmd
 $ file = "test_hello"
 $ cfile = file + ".c"
+$ lstfile = file + ".lis"
+$ mapfile = file + ".map"
+$ dsffile = file + ".dsf"
+$ ofile = file + ".o"
 $ more_files = ""
 $ expect_cc_out = ""
 $ out_file = "test_cc_prog.out"
@@ -958,6 +888,7 @@ $ expect_usw = 0
 $ expect_uopt = 0
 $ efile = "a.out"
 $ cflags = ""
+$ options = ""
 $ expect_cc_out = ""
 $ noexe = 0
 $ no_efile = 0
@@ -976,6 +907,8 @@ $ cfile = file + ".c"
 $ if f$search(cfile) .nes. "" then delete 'cfile';
 $ create 'cfile'
 #include <stdio.h>
+
+int hello_sub(const char * str);
 
 int main(int argc, char **argv) {
 #ifdef Test_NDEFINE
@@ -998,5 +931,19 @@ int main(int argc, char **argv) {
     return 0;
 # endif
 #endif
+}
+$ return
+$!
+$!
+$! Create a test subroutine file
+$create_hello_sub_c:
+$ tcfile = "hello_sub.c"
+$ if f$search(tcfile) .nes. "" then delete 'tcfile';
+$ create 'tcfile'
+#include <stdio.h>
+
+int hello_sub(const char * str) {
+    puts(str);
+    return 0;
 }
 $ return

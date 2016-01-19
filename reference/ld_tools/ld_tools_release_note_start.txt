@@ -390,6 +390,13 @@ Fixes and enhancements:
   -Ww*
   -Wz*
 
+* Several of the options that know to this wrapper have been identified as
+  Tru64 specific options.  The help script has been updated to show these.
+  These may show up in makefiles when confgure assumes the system uses
+  the Tru64 compiler and linker.  The "-ms" option does not work the way
+  specified by the Tru64 compiler.
+  TODO: Many of the Tru64 options have not been tested or implemented.
+
 ** Version 3.0.3
 
 *  Fixed issue in binary 3.0.2 Itanium release were concealed logical names
@@ -503,29 +510,14 @@ Issues not fixed:
    can be found that supports it.
 
    The list of obsolete options includes:
-   "-crtlsup", "-cxx", "-h", "-K", "-spike", "-FI", "-V", "-Wc", "-accept",
-   "-ansi_alias", "-ansi_args", "-arch", "-assume", "-c99", "-check",
-   "-check_cmp", "-common", "-double", "-error_limit", "-fast",
-   "-feedback", "-float", "-float_const", "-fp_reorder", "-fprm", "-fptm",
-   "-framepointer", "-g0", "-g1", "-g2", "-g3", "-gen_feedback",
-   "-granularity", "-hpath", "-ieee", "-ifo", "-inline", "-intrinsics",
-   "-isoc94", "-machine_code", "-member_alignement", "-misalign", "-mp",
-   "-ms", "-msg_*", "-names_as_is_short", "-nestlevel", "-noansi_alias",
-   "-nocheck_bounds", "-nocurrent_include", "-noerror_limit",
-   "-nofp_recorder", "-noinline", "-nointrisics", "nopg", "nopids",
-   "-oldcomment", "-om", "-omp", "-pids", "-portable", "-preempt*",
-   "-prof_*", "-protect_headers", "-protoi", "-protos",
-   "-readonly_strings", "-scope_listing", "-show", "-signed",
-   "-source_listing", "-speculate", "-std0", "-std1",
-   "-strong_volatile", "-tc", "-trapuv", "-tune", "-unroll", "-unsigned",
-   "-varargs", "-vaxc", "-verbose", "-volatile", "-w0", "-w1", "-w2",
-   "-w3", "-warnprotos", "-weak_volatile", "-writeable_strings",
-   "-xtaso*", "-p0", "-p1","-WL", "-auto_symvec", "-call_shared",
-   "-check_registry", "-compress", "-cord", "-exact_version",
-   "-expect_unresolved", "-i", "-init", "-input_to_ld",
-   "-auto_linker_symvec", "-noarchive", "-non_shared", "-none",
-   "-r", "--relocatable", "-rpath", "-set_version", "-soname", "-taso",
-   "-update_registry".
+   "-crtlsup", "-cxx", "-h", "-K", "-FI", "-V", "-Wc", "-accept",
+   "-c99", "-check", "-common", "-double", "-float_const", "-framepointer",
+   "-gen_feedback", "-hpath", "-isoc94", "-machine_code", "-ms", "-msg_*",
+   "-names_as_is_short", "nopids", "-oldcomment", "-pids", "-portable",
+   "-prof_*", "-readonly_strings", "-scope_safe", "-show", "-source_listing",
+   "-strong_volatile", "-tc", "-varargs", "-vaxc", "-volatile", "-warnprotos",
+   "-WL", "-auto_symvec", "-compress", "-init", "-input_to_ld",
+   "-auto_linker_symvec", "-noarchive", "--relocatable", "-rpath"
    https://sourceforge.net/p/gnv/bugs/84/
 
    The "-M<x>" options need to generate options for GNU make operating in
