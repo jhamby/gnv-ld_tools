@@ -409,11 +409,6 @@ $!
 $flst_loop_end:
 $ close flst
 $!
-$!   Add Link alias procedure file (N/A for ld_tools)
-$!-----------------------------------------------------
-$ write pdsc "   file ""[vms_bin]ld_tools_alias_setup.com"""
-$ write pdsc "     source [vms_bin]ld_tools_alias_setup.com ;"
-$!
 $!   Add [.SYS$STARTUP]gnv$ld_tools_startup file
 $!---------------------------------------
 $ write pdsc "   file ""[sys$startup]gnv$ld_tools_startup.com"""
