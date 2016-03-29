@@ -7,10 +7,6 @@ $! If P1 is "BETA" then the kit version type is forced to start with
 $! a "B" instead of its normal letter.  If P2 is also specified, then
 $! the first character of P2 will be used for the version.
 $!
-$! If P1 is "COMPRESSED", an additional compressed kit is produced.
-$! This compressed kit is not as small as ZIP compression can do.
-$! COMPRESSED and BETA are mutually exclusive.
-$!
 $! 13-Dec-2013  J.Malmberg
 $!
 $!=========================================================================
@@ -153,22 +149,12 @@ $product package 'product_name' -
  /material=('gnu_src','source') -
  /format=sequential 'pcsi_option'
 $!
-$!
-$! VAX can not do a compressed kit.
-$! ZIP -9 "-V" does a better job, so no reason to normally build a compressed
-$! kit.
-$!----------------------------------
-$if p1 .eqs. "COMPRESSED"
+$if f$type(zip) .eqs. "STRING"
 $then
-$   if arch_code .nes. "V"
-$   then
-$       product copy /options=(novalidate, noconfirm) /format=compresld_tool -
-        'product_name' -
-        /source=stage_root:[kit]/dest=stage_root:[kit] -
-        /version='version'/base='base'
-$   endif
+$   zip "-9Vj" stage_root:[kit]'kit_name'.zip stage_root:[kit]'kit_name'.pcsi
 $endif
 $!
 $all_exit:
 $ set def 'default_dir'
+
 $ exit

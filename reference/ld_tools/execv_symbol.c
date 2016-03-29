@@ -77,6 +77,7 @@ void expand_symbol(char **array, const char * symbol) {
     int ac = 0;
     int ws = 1;
     int quote = 0;
+    int dq = 0;
     char * symbol_str;
 
     symbol_str = get_symbol(symbol);
@@ -115,8 +116,19 @@ void expand_symbol(char **array, const char * symbol) {
             if (symbol_str[i] == quote) {
                 /* No nesting of quotes in test harness */
                 quote = 0;
+                /* Discard enclosing trailing quote */
+                if (dq != 0) {
+                    dq = 0;
+                    break;
+                }
             } else {
                 quote = symbol_str[i];
+                dq = 0;
+            }
+            /* Discard leading quote */
+            if (j == 0) {
+                dq = 1;
+                break;
             }
             array[ac][j] = symbol_str[i];
             j++;

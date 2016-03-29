@@ -449,6 +449,7 @@ Modification history:
 #include <libgen.h>
 #ifndef __VAX
 #include <gen64def.h>
+#include <ppropdef.h>
 #endif
 #define sys$trnlnm hide_sys$trnlnm
 #define sys$crelnm hide_sys$crelnm
@@ -608,6 +609,7 @@ char actual_name[MAX_NAME + 1];
 int gnv_cc_debug;
 int gnv_crtl_sup;
 int gnv_link_debug;
+int gnv_link_map;
 int gnv_link_missing_lib_error;
 int gnv_link_lib_over_shared;
 int gnv_link_auto_symvec_nodata;
@@ -624,6 +626,7 @@ int gnv_cc_define_length_max;
 int gnv_cc_include_length_max;
 int gnv_cc_no_module_first;
 int gnv_cc_no_inc_primary;
+char * gnv_cc_module_first_dir;
 char module_first[1024];
 char gnv_cc_stdin_file[1024];
 int gnv_ld_object_length_max;
@@ -685,6 +688,7 @@ int no_object = 0;
 int objfile = 0;
 char *outfile = 0;
 int link_incr = 0;
+char * define_file = NULL;
 
 struct sysshr_lib {
     const char *lib;
@@ -747,9 +751,15 @@ static char *object_opt_name_ptr = NULL;
 
 #if __CRTL_VER >= 70302000 && !defined(__VAX)
 #define MAX_DCL_LINE_LENGTH 4095
+#ifdef PPROP$C_TOKEN
+#define DEFAULT_DEFINE_LEN_MAX 3000
+#define DEFAULT_INCLUDE_LEN_MAX 3000
+#define DEFAULT_OBJECT_LEN_MAX 3000
+#else
 #define DEFAULT_DEFINE_LEN_MAX 1000
 #define DEFAULT_INCLUDE_LEN_MAX 1000
 #define DEFAULT_OBJECT_LEN_MAX 1000
+#endif
 #else
 #define MAX_DCL_LINE_LENGTH 1023
 #define DEFAULT_DEFINE_LEN_MAX 200
@@ -1270,22 +1280,9 @@ void output_help( void)
     GNV_CC_DEBUG		{1, 0}\n\
 	When enabled, DCL command files are echoed and temporary files\n\
 	are not deleted.\n\
-    GNV_CC_DEFINE_LENGTH_MAX	number\n\
-	Controls how long the /DEFINE and /UNDEFINE lists can be before a\n\
-	pre-include file is used instead. Default is 1000 characters for\n\
-	OpenVMS Alpha and Integrity for versions 7.3-2 and later and\n\
-	200 characters otherwise.\n\
     GNV_CC_MAIN_POSIX_EXIT	{1, 0}\n\
 	When enabled, adds /MAIN=POSIX_EXIT.  This reqires version 7.1 or\n\
 	of the C/C++ compilers.\n\
-    GNV_CC_NO_MODULE_FIRST	{1, 0}\n\
-	When set, a file with the source module name with \"gnv$\" and\n\
-	\"_first\" appended will not be looked for in the same directory,\n\
-	otherwise the first one found for a list of files will be used as a\n\
-	/FIRST_INCLUDE file for all files to be compiled.\n\
-	If no files are found, for .c and .cxx files only, if the the\n\
-	GNV_OPT_DIR feature is set, a gnv$first_include.h file will be\n\
-	used as a /FIRST_INCLUDE file if it exists.\n\
     GNV_CC_NO_POSIX_EXIT	{1, 0}\n\
 	When enabled, prevents /DEFINE=_POSIX_EXIT.\n\
     GNV_CC_NO_USE_STD_STAT	{1, 0}\n\
@@ -1301,11 +1298,6 @@ void output_help( void)
 	When enabled, sets the default message level to /WARN=INFO=ALL.\n\
     GNV_CC_SOCKADDR_LEN	{1, 0}\n\
 	When enabled, causes /DEFINE=_SOCKADDR_LEN.\n\
-    GNV_CC_INCLUDE_LENGTH_MAX	number\n\
-	Controls how long the /INCLUDE list can be before a\n\
-	pre-include file is used instead. Default is 1000 characters for\n\
-	OpenVMS Alpha and Integrity for versions 7.3-2 and later and\n\
-	200 characters otherwise.\n\
     GNV_CC_NO_INC_PRIMARY	{1, 0}\n\
 	When set the path that the primary source file is present on\n\
 	will not be added as an additional include path.  This is to\n\
@@ -1319,6 +1311,32 @@ void output_help( void)
 	When set, appends the CXX qualifers to the CXX command line.\n\
     GNV_CXX_SET_COMMAND		dcl-command\n\
 	When set, this DCL command is executed before the CXX command.");
+    }
+    if (is_cxx || is_cc || verbose) {
+        puts("\
+    GNV_CC_DEFINE_LENGTH_MAX	number\n\
+	Controls how long the /DEFINE and /UNDEFINE lists can be before a\n\
+	pre-include file is used instead. Default is 1000 characters for\n\
+	OpenVMS Alpha and Integrity for versions 7.3-2 and later and\n\
+	200 characters otherwise.\n\
+    GNV_CC_INCLUDE_LENGTH_MAX	number\n\
+	Controls how long the /INCLUDE list can be before a\n\
+	pre-include file is used instead. Default is 1000 characters for\n\
+	OpenVMS Alpha and Integrity for versions 7.3-2 and later and\n\
+	200 characters otherwise.\n\
+    GNV_CC_MODULE_FIRST_DIR		option-directory\n\
+	When set, this specifies the directory in UNIX format that a\n\
+	first include file with the same name as the source module but\n\
+	prefixed with \"gnv$\" and \"_first\" appended to be used instead\n\
+	of the directory the module is in.\n\
+    GNV_CC_NO_MODULE_FIRST	{1, 0}\n\
+	When set, a file with the source module name with \"gnv$\" and\n\
+	\"_first\" appended will not be looked for in the same directory,\n\
+	otherwise the first one found for a list of files will be used as a\n\
+	/FIRST_INCLUDE file for all files to be compiled.\n\
+	If no files are found, for .c and .cxx files only, if the the\n\
+	GNV_OPT_DIR feature is set, a gnv$first_include.h file will be\n\
+	used as a /FIRST_INCLUDE file if it exists.");
     }
     if (is_ld || verbose) {
         puts("\n\
@@ -1341,32 +1359,40 @@ void output_help( void)
     GNV_LINK_DEBUG		{1, 0}\n\
 	When enabled, uses LINK/DEBUG when compiling /DEBUG. This\n\
 	sets the initial breakpoint. If not enabled, a separate\n\
-        debug symbol file is created which can be used with RUN/DEBUG.\n\
+	debug symbol file is created which can be used with RUN/DEBUG.\n\
+	The debug symbol file is not created on VAX.\n\
     GNV_LINK_LIB_OVER_SHARED	{1, 0}\n\
-        When enabled, -l<foo> will try to find libraries the same way LD\n\
-        does on Linux.  When disabled, -l<foo> will use a logical name\n\
-        GNV$LIB<foo>, with periods with underscores and pluses replaced\n\
-        with x characters.\n\
+	When enabled, -l<foo> will try to find libraries the same way LD\n\
+	does on Linux.  When disabled, -l<foo> will use a logical name\n\
+	GNV$LIB<foo>, with periods with underscores and pluses replaced\n\
+	with x characters.\n\
     GNV_LINK_LIB_TYPES		list of file suffixes\n\
 	Defines file types (suffixes) and search order for libraries\n\
 	specified via the -l option. If not specified, the default\n\
-        is \"olb a exe so\". Use space, comma, or slash as separators.\n\
+	is \"olb a exe so\". Use space, comma, or slash as separators.\n\
+    GNV_LINK_MAP		{1, 0}\n\
+	When enabled, uses LINK/MAP=exefile.MAP.  The exefile is\n\
+	based on the image file being created.\n\
+    GNV_LINK_MAP		{1, 0}\n\
+	When enabled, uses LINK/MAP=exefile.MAP.  The exefile is\n\
+	based on the image file being created.\n\
     GNV_LINK_MISSING_LIB_ERROR	{1, 0}\n\
 	When enabled, cause a missing library file to be treated as\n\
 	an error. If not enabled, a missing library file is a warning.\n\
     GNV_LINK_NO_UNDEF_ERROR	{1, 0}\n\
 	When enabled, prevents undefined symbols at link time from being\n\
 	an error. The default is undefined symbols cause an error status.\n\
-    GNV_OPT_DIR			option-directory\n\
-	When set, this specifies the directory in UNIX format that a\n\
-	linker option file with the same name as the executable but\n\
-	optionally prefixed with gnv$ will be used if it exists.\n\
     GNV_LINK_QUALIFERS		command-qualifiers\n\
 	When set, appends the LINK qualifers to the LINK command line.\n\
     GNV_SUFFIX_MODE		{vms, unix}\n\
 	When set to \"vms\", object files have type .OBJ and executable\n\
 	files have type .EXE.");
    }
+   puts("\
+    GNV_OPT_DIR			option-directory\n\
+	When set, this specifies the directory in UNIX format that a\n\
+	linker option file with the same name as the executable but\n\
+	optionally prefixed with gnv$ will be used if it exists.");
 
     /*
     ** Output one line for each supported argument in the option table
@@ -1375,10 +1401,10 @@ void output_help( void)
 	ccopt_t *cc_opt = &ccopt_table[i];
 	char *phase;
 	char *text;
-        char *support;
+	char *support;
 	char *val;
 	char txt[80];
-        int txt_len;
+	int txt_len;
 	char value[80];
 	char line[256];
 	int len, fill;
@@ -1823,6 +1849,33 @@ int list_size (arglist_t *arglist) {
 }
 
 /*
+ * Determine if a pre-include file is needed.  Need to check both
+ * the include and define lengths against the max DCL length.
+ * TODO: This check really needs to know the how long the actual command
+ * is going to end up.
+ */
+int use_pre_include_file(void) {
+    int define_length;
+    int include_length;
+
+    define_length = list_size(&l_define)+list_size(&l_undefine);
+    if (define_length > gnv_cc_define_length_max) {
+	return 1;
+    }
+    include_length = list_size(&l_include_dir);
+    if (include_length > gnv_cc_include_length_max) {
+	return 1;
+    }
+
+    /* This calculation needs to be more robust */
+    if ((define_length + include_length) > (MAX_DCL_LINE_LENGTH - 1000)) {
+	return 1;
+    }
+    return 0;
+}
+
+
+/*
  * Create an include file, write the define/undefines to it, and then
  * add the include file to the head of the pre-include list.
  */
@@ -1839,15 +1892,31 @@ void create_define_list(const char* file_base) {
 
 	list_t new;
 
+	define_file = strdup(fn);
 	fprintf(f, "/* Created automatically by cc */\n");
 
 	/* write all the defines to the pre-include file */
 	lptr = l_define.list;
 	while (lptr != 0) {
 	    char *p = strchr(lptr->str,'=');
+	    char *s;
+	    int quoted = 0;
+	    /* lptr->str is const, but existing code is modifying
+	     * the contents.
+	     */
+	    s = (char *)lptr->str;
+	    if (*s == '"') {
+		s++;
+		quoted=1;
+	    }
 	    if (p) {
+		int plen;
 		*p++='\0';
-		fprintf(f, "#define %s %s\n",lptr->str, p);
+		if (quoted) {
+		    plen = strlen(p);
+		    p[plen -1] = 0;
+		}
+		fprintf(f, "#define %s %s\n", s, p);
 	    }
 	    else
 		fprintf(f, "#define %s 1\n",lptr->str);
@@ -1906,11 +1975,15 @@ void output_list (FILE *fp, arglist_t *arglist)
     while (lptr) {
 	int this_len;
 
-	if (arglist->quote)
-	    sprintf(this_one, "\"%s\"", fix_quote(lptr->str));
-	else
+	if (arglist->quote) {
+	    if (lptr->str[0] == '"') {
+		strcpy(this_one, lptr->str);
+	    } else {
+		sprintf(this_one, "\"%s\"", fix_quote(lptr->str));
+	    }
+	} else {
 	    strcpy(this_one, lptr->str);
-
+	}
 	this_len = strlen(this_one);
 
 	if (arglist->str && lptr != arglist->list )
@@ -2479,8 +2552,7 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
     ** pre-include file.
     */
 
-    if ( (list_size(&l_define)+list_size(&l_undefine)) >
-          gnv_cc_define_length_max) {
+    if (use_pre_include_file()) {
 	char *f;
 	if (outfile && !linkx)
 	    f = outfile;
@@ -2570,7 +2642,7 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
     /*
     ** Do we have too many -I include directories for the command line?
     */
-    many_includes = list_size(&l_include_dir) > gnv_cc_include_length_max;
+    many_includes = use_pre_include_file();
 
     /*
     ** Output the include (-I) directories if they're going on the command
@@ -2793,8 +2865,17 @@ void do_link(FILE *fp, FILE *ofp, const char * opt_name_ptr)
 	fprintf(fp,
 	    "/%s=%s-\n", sharedx ? "shar" : "exec",
 	    unix_to_vms(outfile, FALSE));
+
+	if (gnv_link_map) {
+	    char *mapfile;
+	    mapfile = new_suffix3(outfile, ".map");
+
+	    fprintf(fp,
+	        "/MAP=%s-\n", unix_to_vms(mapfile, FALSE));
+	}
     }
 
+#ifndef __VAX
     if (debug && !debug_link) {
 	static char opt_buf[1024];
 	const char *dsf_suffix;
@@ -2804,6 +2885,7 @@ void do_link(FILE *fp, FILE *ofp, const char * opt_name_ptr)
 	strcpy((char *)dsf_suffix, ".DSF");
 	fprintf(fp, "/DSF=%s-\n", unix_to_vms (opt_buf, FALSE));
     }
+#endif
 
     /*
     ** This is the start of the processing for the auto-generated
@@ -3243,18 +3325,20 @@ int main(int argc, char *argv[])
     gnv_cc_debug	= enabled("GNV_CC_DEBUG");
     gnv_crtl_sup	= enabled("GNV_CRTL_SUP");
     gnv_link_debug	= enabled("GNV_LINK_DEBUG");
+    gnv_link_map	= enabled("GNV_LINK_MAP");
     gnv_cc_warn_info    = enabled("GNV_CC_WARN_INFO");
-    gnv_cc_warn_info_all= enabled("GNV_CC_WARN_INFO_ALL");
-    gnv_cc_no_posix_exit= enabled("GNV_CC_NO_POSIX_EXIT");
-    gnv_cc_main_posix_exit= enabled("GNV_CC_MAIN_POSIX_EXIT");
+    gnv_cc_warn_info_all = enabled("GNV_CC_WARN_INFO_ALL");
+    gnv_cc_no_posix_exit = enabled("GNV_CC_NO_POSIX_EXIT");
+    gnv_cc_main_posix_exit = enabled("GNV_CC_MAIN_POSIX_EXIT");
 
 #if __CRTL_VER >= 80200000 && !defined(__VAX)
-    gnv_cc_no_use_std_stat= enabled("GNV_CC_NO_STD_STAT");
+    gnv_cc_no_use_std_stat = enabled("GNV_CC_NO_STD_STAT");
 #else
-    gnv_cc_no_use_std_stat=1; /* It is not there to use */
+    gnv_cc_no_use_std_stat = 1; /* It is not there to use */
 #endif
-    gnv_cxx_no_use_std_iostream= enabled("GNV_CXX_NO_STD_IOSTREAM");
-    gnv_cc_sockaddr_len=enabled("GNV_CC_SOCKADDR_LEN");
+    gnv_cxx_no_use_std_iostream = enabled("GNV_CXX_NO_STD_IOSTREAM");
+    gnv_cc_sockaddr_len = enabled("GNV_CC_SOCKADDR_LEN");
+    gnv_cc_module_first_dir = getenv("GNV_CC_MODULE_FIRST_DIR");
     gnv_cc_no_module_first = enabled("GNV_CC_NO_MODULE_FIRST");
     gnv_cc_no_inc_primary = enabled("GNV_CC_NO_INC_PRIMARY");
     module_first[0] = '\0';
@@ -3348,9 +3432,10 @@ int main(int argc, char *argv[])
 	    else default_exe_suffix = "";
     }
 
-    /* The command line provided looks like it is pre-parsed for us
-     * unfortunately it is far from it.  At best it has done us the
-     * the favor of compressing multiple white space into nulls.
+    /* The command line provided from Bash or other Unix tools is
+     * pre-parsed.  From DCL it has not been parsed, but only has
+     * the favor of removing multiple whitespace, and some of the
+     * quotes that were significant in parsing.
      *
      * The various strings that have been separated may in fact be
      * single options spread over more than one argv[n], or multiple
@@ -3365,22 +3450,54 @@ int main(int argc, char *argv[])
 	for (i = 1; i < argc; i++) {
 	    command_line_len += strlen(argv[i]) + 1;
 	}
-
 	if (command_line_len > 0) {
+	    int j;
+	    int max_cmd_line;
+
 	    /* Add space for optional quotes */
-	    command_line = malloc(command_line_len + ((argc - 1) * 2));
+	    max_cmd_line = command_line_len + ((argc - 1) * 4);
+	    command_line = malloc(max_cmd_line);
 	    if (command_line == NULL) {
-		perror("? malloc(command_line_len)");
+		perror("? malloc(max_cmd_line)");
 		exit(EXIT_FAILURE);
 	    }
 
-	    strcpy(command_line, argv[1]);
+	    /* Any argument has double quotes or whitespace it means that
+	     * the argument was originally quoted, so for now restore the
+	     * single quotes.  On UNIX you can actually pass any character
+	     * here, we do not handle that at this time since we would have
+	     * to figure out how to hand that off to the DCL session.
+	     */
+	    j = 0;
 	    command_line[0] = 0;
 	    for (i = 1; i < argc; i++) {
-		if (command_line[0] != 0) {
-		    strcat(command_line, " ");
+		char * test_str1;
+		char * test_str2;
+		int sq = 0;
+		test_str1 = strchr(argv[i], '"');
+		test_str2 = strpbrk(argv[i],
+				    "\" \t,()!#~`@%^&+{}[]:;|<?>");
+		if (strncmp(argv[i], "-W", 2) == 0) {
+		    /* No known -Wx, needs single quoting... */
+		    test_str2 = NULL;
 		}
-		strcat(command_line, argv[i]);
+		if ((test_str1 == NULL) && (test_str2 != NULL)) {
+		    command_line[j] = '\'';
+		    j++;
+		    command_line[j] = 0;
+		    sq = 1;
+		}
+		strcpy(&command_line[j], argv[i]);
+		j = strlen(command_line);
+		if (sq) {
+		    command_line[j] = '\'';
+		    j++;
+		}
+		if (argv[i+1] != NULL) {
+		    command_line[j] = ' ';
+		    j++;
+		}
+		command_line[j] = 0;
 	    }
 	}
     }
@@ -3464,8 +3581,16 @@ int main(int argc, char *argv[])
         }
 	else {
 	    /* Skip this command */
-	    while (!isspace(command_line[i]) && command_line[i])
+	    if (command_line[i] == '\'') {
 		i++;
+		while ((command_line[i] != '\'') && command_line[i]) {
+		    i++;
+		}
+	    } else {
+		while (!isspace(command_line[i]) && command_line[i]) {
+		    i++;
+		}
+	    }
 	}
     }
 
@@ -3475,11 +3600,19 @@ int main(int argc, char *argv[])
      */
 
     for (i = 0; i < command_line_len; i++) {
-	char curr_arg[5000]; /* should be big enough */
+	char curr_arg[MAX_DCL_LINE_LENGTH + 1000]; /* should be big enough */
+	int single_quoted;
 
 	/* skip over leading white space */
 	while(isspace(command_line[i]) && (command_line[i] != '\0'))
 	   i++;
+
+	/* Skip over a leading single quote, but set the flag */
+	single_quoted = 0;
+	if (command_line[i] == '\'') {
+	    single_quoted = 1;
+	    i++;
+	}
 
 	/*
 	 * Whenever we see a hyphen, process what follows it as option text
@@ -3529,12 +3662,18 @@ int main(int argc, char *argv[])
 
 	    /* Find the delimiters of the token */
 	    quote_seen = 0;
+	    if (single_quoted) {
+		quote_seen = '\'';
+	    }
 	    j = i;
 	    while (command_line[j] != 0) {
-		/* May have quotes in it */
+		/* May have quotes in it.
+		 * DCL invocatons may have double quotes but probably
+		 * not single quoted ones.
+		 * Bash/make invocations could have single quoted.
+		 */
 		if (quote_seen) {
 		    if (command_line[j] == quote_seen) {
-			command_line[j] = '\"';
 			quote_seen = 0;
 		    }
 		} else {
@@ -3545,7 +3684,6 @@ int main(int argc, char *argv[])
 			(command_line[j] == '\"')) {
 
 			quote_seen = command_line[j];
-			command_line[j] = '\"';
 		    }
 		}
 		j++;
@@ -3560,6 +3698,13 @@ int main(int argc, char *argv[])
 	    /* Make a copy of the substring */
 	    strncpy(curr_arg, &command_line[i], j - i);
 	    curr_arg[j-i] = 0;
+
+	    /* Remove the trailing single quote */
+	    if (single_quoted) {
+		int kk;
+		kk = j - i - 1;
+		curr_arg[kk] = 0;
+	    }
 
 	    /* Original parser assumed whitespace separates values on the
 	     * command line which only works for arguments that are more
@@ -3592,11 +3737,14 @@ int main(int argc, char *argv[])
 		case X_xval:	/* Value part of argument */ /* or */
 		case X_val:	/* value in next argument */
 		    {
-		      int k;
+		      int k,kk;
 
 		      /* Index to value in command_line */
 		      k = i;
 		      quote_seen = 0;
+		      if (single_quoted) {
+			  quote_seen = '\'';
+		      }
 
 		      /* skip over delimiter */
 		      if (command_line[k] == ',') {
@@ -3623,7 +3771,6 @@ int main(int argc, char *argv[])
 			  /* May have quotes in it */
 			  if (quote_seen) {
 			      if (command_line[k] == quote_seen) {
-				  command_line[k] = '\"';
 				  quote_seen = 0;
 			      }
 			  } else {
@@ -3641,9 +3788,20 @@ int main(int argc, char *argv[])
 		      }
 
 		      /* Make a copy of the substring */
-		      value_ptr = malloc((k-j)+1);
-		      strncpy(value_ptr, &command_line[j], k - j);
-		      value_ptr[k-j] = 0;
+		      value_ptr = malloc((k-j)+3);
+		      kk = 0;
+		      if (single_quoted) {
+			  value_ptr[kk] = '"';
+			  kk++;
+		      }
+		      strncpy(&value_ptr[kk], &command_line[j], k - j);
+		      kk = kk + (k-j);
+		      value_ptr[kk] = 0;
+
+		      /* Replace the trailing single quote */
+		      if (single_quoted) {
+			  value_ptr[kk - 1] = '"';
+		      }
 
 		      i = k;
 		    }
@@ -3954,10 +4112,17 @@ int main(int argc, char *argv[])
 
 	    /* Find the delimiters of the token */
 	    j = i;
-	    while(!isspace(command_line[j]) && (command_line[j] != 0)) {
-		if (command_line[j] == ',')
-		    break;
-		j++;
+
+	    if (single_quoted) {
+		while ((command_line[j] != '\'') && (command_line[j] != 0)) {
+		    j++;
+		}
+	    } else {
+		while(!isspace(command_line[j]) && (command_line[j] != 0)) {
+		    if (command_line[j] == ',')
+			break;
+		    j++;
+		}
 	    }
 	    if ((j-i) >= sizeof curr_arg) {
 		errmsg
@@ -3970,6 +4135,9 @@ int main(int argc, char *argv[])
 	    strncpy(curr_arg, &command_line[i], j - i);
 	    curr_arg[j-i] = 0;
 	    i = j;
+	    if (single_quoted) {
+		j++;
+	    }
 
 	    /*
 	     * Check to see if we are processing stdin (i.e. user typed a
@@ -4044,7 +4212,11 @@ int main(int argc, char *argv[])
 			/* A gnv$ prefix is needed because Configure scripts
 			 * tend to do wildcard deletes of the temporary files
 			 */
-			strcpy(module_first, dname);
+			if (gnv_cc_module_first_dir) {
+			    strcpy(module_first, gnv_cc_module_first_dir);
+			} else {
+			    strcpy(module_first, dname);
+			}
 			strcat(module_first, "/gnv$");
 			strcat(module_first, bname);
 			strcat(module_first, "_first");
@@ -4247,6 +4419,15 @@ int main(int argc, char *argv[])
     fprintf(cmd_proc, "$on e then goto exit\n");
     fprintf(cmd_proc, "$set mess /faci/iden/seve/text\n");
 
+#ifndef __VAX
+#ifdef PPROP$C_TOKEN
+    fprintf(cmd_proc, "$set process/token=extended\n");
+#endif
+#ifdef PPROP$C_PARSE_STYLE_TEMP
+    fprintf(cmd_proc, "$set process/parse_style=extended\n");
+#endif
+#endif
+
     if (version && !l_cxxfiles.list && !l_cfiles.list && !l_objfiles.list &&
         (is_cxx || is_cc))
         do_compile(cmd_proc, NULL, is_cxx);
@@ -4370,6 +4551,9 @@ int main(int argc, char *argv[])
         remove(cmd_proc_name);
 	if (object_opt_name_ptr != NULL) {
 	    remove(object_opt_name_ptr);
+	}
+	if (define_file != NULL) {
+	    remove(define_file);
 	}
     }
 

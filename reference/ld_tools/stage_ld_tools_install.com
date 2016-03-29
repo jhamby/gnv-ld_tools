@@ -20,6 +20,11 @@ $!
 $ arch_type = f$getsyi("ARCH_NAME")
 $ arch_code = f$extract(0, 1, arch_type)
 $!
+$ if arch_code .nes. "V"
+$ then
+$   set proc/parse=extended
+$ endif
+$!
 $ mode = "install"
 $ code = f$extract(0, 1, p1)
 $ if code .eqs. "R" .or. code .eqs. "r" then mode = "remove"

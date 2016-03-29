@@ -2,6 +2,7 @@ $! File: test_ld_tools.com
 $!
 $! Use test_cc foreign command to prevent recursion
 $!--------------------------------------------------
+$ cc := "cc/list"
 $ if f$search("gnv$gnu:[bin]cc.exe") .eqs. ""
 $ then
 $   ! Acctual installed location
@@ -29,12 +30,20 @@ $!
 $! Initialize counts.
 $ fail = 0
 $ test = 0
+$ test_count = 46
 $ pid = f$getjpi("", "pid")
+$!
+$ create sys$disk:[]test_output.xml/fdl="RECORD; FORMAT STREAM_LF;"
+$ open/append junit sys$disk:[]test_output.xml
+$ write junit "<?xml version=""1.0"" encoding=""UTF-8""?>
+$ write junit "  <testsuite name=""ld_tools"""
+$ write junit "   tests=""''test_count'"">"
 $!
 $gosub clean_params
 $!
 $! Start with testing the version
 $!--------------------------------
+$! goto first_fail
 $ gosub version_test
 $!
 $! Then multi-arch
@@ -53,6 +62,12 @@ $ if arch_code .nes. "V"
 $ then
 $   gosub compile_dot_in_directory
 $   gosub compile_dot_in_name
+$ else
+$   skip_reason "OSS-5 support"
+$   testcase_name = "compile_dot_in_directory"
+$   gosub skipped_test_driver
+$   testcase_name = "compile_dot_in_name"
+$   gosub skipped_test_driver
 $ endif
 $!
 $! STD tests
@@ -92,10 +107,23 @@ $ gosub quoted_define
 $ gosub quoted_define2
 $ gosub numeric_define
 $ gosub string_define
+$ gosub single_quoted_define ! GNV Ticket 103
 $!
-$! gnv$xxx.* files
-$!----------------
+$! LONG_DEFINE_LINES bug - GNV Ticket 101
+$ if arch_code .nes. "V"
+$ then
+$   gosub cc_define_token_max
+$ else
+$   skip_reason "DCL extended parse needed"
+$   testcase_name = "cc_define_token_max"
+$   gosub skipped_test_driver
+$ endif
+$!
+$! gnv$xxx.* files and options
+$!-----------------------------
 $ gosub ld_auto_opt_file
+$ gosub ld_link_map
+$ gosub cc_first_module_dir
 $!
 $! Missing objects/images
 $ if arch_code .nes. "V"
@@ -104,6 +132,14 @@ $   !VAX does not get warning status from compiler.
 $   gosub missing_objects
 $   gosub missing_shared_images
 $   gosub missing_library
+$ else
+$   skip_reason "VAX not returning error status"
+$   testcase_name = "missing_objects"
+$   gosub skipped_test_driver
+$   testcase_name = "missing_shared_images"
+$   gosub skipped_test_driver
+$   testcase_name="missing_library"
+$   gosub skipped_test_driver
 $ endif
 $!
 $! Command file helpers
@@ -113,9 +149,15 @@ $! Special GNV shared logical
 $ gosub ld_gnv_shared_logical
 $ gosub ld_gnv_shared_logical2
 $!
+$!
 $! Sumarize the run
 $!---------------------
 $REPORT:
+$!
+$ write junit "</testsuite>"
+$ close junit
+$!
+$!
 $ gosub test_clean_up
 $ write sys$output "''test' tests run."
 $ if fail .ne. 0
@@ -132,8 +174,7 @@ $!
 $! Basic Version test
 $!------------------------
 $version_test:
-$!
-$ write sys$output "Version test"
+$ testcase_name = "version_test"
 $ test = test + 1
 $ out_file = "sys$scratch:test_cc_version.out"
 $ efile = "a.out"
@@ -145,8 +186,7 @@ $!
 $! --print-multiarch test
 $!------------------------
 $print_multiarch_test:
-$!
-$ write sys$output "print multiarch test"
+$ testcase_name = "print_multiarch_test"
 $ test = test + 1
 $ lcl_fail = 0
 $ expect_cc_status = 1
@@ -164,7 +204,7 @@ $ return
 $!
 $!
 $print_search_compile:
-$ write sys$output "Compile -print-search-dirs"
+$ testcase_name = "print_search_compile"
 $ test = test + 1
 $ cmd = "/bin/ld"
 $ efile = "a.out"
@@ -176,6 +216,10 @@ $
 $! Driver for compile commands that do not produce an object
 $!----------------------------------------------------------
 $version_test_driver:
+$ write sys$output "''testcase_name'"
+$ write junit "   <testcase name=""''testcase_name'"""
+$ write junit "    classname=""ld_tools.version_test"">"
+$ gosub directory_before
 $ if f$search(out_file) .nes. "" then delete 'out_file';*
 $ if f$search(efile) .nes. "" then delete 'efile';*
 $ cmd_symbol = "''cmd' ''cflags'"
@@ -186,8 +230,9 @@ $ execv 'test_cc' cmd_symbol
 $ cc_status = '$status' .and. (.not. %x10000000)
 $ if cc_status .ne. expect_cc_status
 $ then
-$   write sys$output "  ** CC status was ''cc_status'  not ''expect_cc_status'!"
-$   lcl_fail = lcl_fail + 1
+$   fail_type = "compile"
+$   fail_msg = "CC status was ''cc_status'  not ''expect_cc_status'!"
+$   gosub report_failure
 $ endif
 $ if f$search(out_file) .nes. ""
 $ then
@@ -196,29 +241,33 @@ $   read xx line_in
 $   close xx
 $   if f$locate(expect_cc_out, line_in) .ne. 0
 $   then
-$       write sys$output "  ** ''expect_cc_out' not found in output"
-$       lcl_fail = lcl_fail + 1
+$       fail_type = "compile"
+$       fail_msg = "''expect_cc_out' not found in output"
+$       gosub report_failure
 $       type 'out_file'
 $   endif
 $   delete 'out_file';*
 $ else
-$    write sys$output "  ** Output file not created"
-$    lcl_fail = lcl_fail + 1
+$   fail_type = "compile"
+$   fail_msg = "Output file not created"
+$   gosub report_failure
 $ endif
 $ if f$search(efile) .nes. ""
 $ then
-$    write sys$output -
-         "  ** An object file was created and should not have been!"
-$    lcl_fail = lcl_fail + 1
+$    fail_type = "compile"
+$    fail_msg = "An object file was created and should not have been"
+$    gosub report_failure
 $    delete 'efile';*
 $ endif
+$ gosub directory_after
 $ if lcl_fail .ne. 0 then fail = fail + 1
+$ write junit "   </testcase>"
 $ gosub clean_params
 $ return
 $!
 $!
 $simple_compile:
-$ write sys$output "Simple Compile"
+$ testcase_name = "simple_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ gosub compile_driver
@@ -226,7 +275,7 @@ $ return
 $!
 $!
 $compile_fsyntax_only:
-$ write sys$output "Compile fsyntax-only"
+$ testcase_name = "compile_fsyntax_only"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-fsyntax-only"
@@ -240,7 +289,7 @@ $! Use a concealed logical root for device name
 $! assume single level directory.
 $!
 $compile_root_log_dash_c_dash_o:
-$ write sys$output "Compile rooted logical -c -o"
+$ testcase_name = "compile_root_log_dash_c_dash_o"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_dash_o.out"
@@ -261,7 +310,7 @@ $! Use a concealed logical root for device name
 $! assume single level directory.
 $!
 $compile_log_dash_c_dash_o:
-$ write sys$output "Compile logical -c -o"
+$ testcase_name = "compile_log_dash_c_dash_o"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_dash_o.out"
@@ -276,7 +325,7 @@ $ return
 $!
 $!
 $compile_stdin:
-$ write sys$output "Compile stdin"
+$ testcase_name = "compile_stdin"
 $ test = test + 1
 $ file = "-"
 $ cfile = "-"
@@ -290,9 +339,10 @@ $ return
 $!
 $!
 $compile_dot_in_directory:
-$ write sys$output "Compile with dot in directory"
+$ testcase_name = "compile_dot_in_directory"
 $ test = test + 1
 $ gosub create_test_hello_c
+$ set proc/parse=extended
 $ efile = "[.dot^.in_dir]test_hello."
 $ cflags = "-o ./dot.in_dir/test_hello"
 $ create/dir sys$disk:[.dot^.in_dir]/prot=o:rwed"
@@ -300,15 +350,20 @@ $ gosub compile_driver
 $ dfile = "sys$disk:[.dot^.in_dir]*.*;*"
 $ if f$search(dfile) .nes. "" then delete 'dfile'
 $ delete sys$disk:[]dot^.in_dir.dir;
-$set nover
 $ return
 $!
 $!
 $compile_dot_in_name:
-$ write sys$output "Compile with dot in filename"
+$! write sys$output "Compile with dot in filename, also GNV Ticket 101"
+$ testcase_name = "compile_dot_in_name"
+$! SET PROC/PARSE=TRADITIONAL bug - GNV Ticket 101
 $ test = test + 1
 $ file = "test^.hello"
 $ gosub create_test_hello_c
+$ lstfile = "sys$disk:[]" + file + ".lis"
+$ mapfile = "sys$disk:[]" + file + ".map"
+$ dsffile = "sys$disk:[]" + file + ".dsf"
+$ ofile = file + ".o"
 $ efile = "test.hello"
 $ cflags = "-o test.hello"
 $ old_efs = f$trnlnm("DECC$EFS_CHARSET", "LNM$PROCESS_TABLE")
@@ -324,7 +379,7 @@ $ return
 $!
 $!
 $fstack_protector_compile:
-$ write sys$output "Compile -fstack-protector"
+$ testcase_name = "fstack_protector_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-fstack-protector"
@@ -333,7 +388,7 @@ $ return
 $!
 $!
 $fvisibility_compile:
-$ write sys$output "Compile -fvisibility=hidden"
+$ testcase_name = "visibility_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-fvisibility=hidden"
@@ -342,9 +397,8 @@ $ return
 $!
 $!
 $fpic_compile:
-$ write sys$output "Compile -fPIC"
+$ testcase_name = "fpic_compile"
 $ test = test + 1
-$ lcl_fail = 0
 $ gosub create_test_hello_c
 $ cflags = "-fPIC"
 $ gosub compile_driver
@@ -352,7 +406,7 @@ $ return
 $!
 $!
 $std_c99_compile:
-$ write sys$output "Compile -std=c99"
+$ testcase_name = "std_c99_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-std=c99"
@@ -362,7 +416,7 @@ $ return
 $!
 $!
 $std_c90_compile:
-$ write sys$output "Compile -std=c90"
+$ testcase_name = "std_c90_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-std=c99"
@@ -372,7 +426,7 @@ $ return
 $!
 $!
 $std_gnu90_compile:
-$ write sys$output "Compile -std=gnu90"
+$ testcase_name = "std_gnu90_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-std=gnu90"
@@ -383,7 +437,7 @@ $ return
 $!
 $!
 $strict_aliasing_compile:
-$ write sys$output "Compile -fstrict-aliasing"
+$ testcase_name = "strict_aliasing_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-fstrict-aliasing"
@@ -394,7 +448,7 @@ $ return
 $!
 $!
 $no_strict_aliasing_compile:
-$ write sys$output "Compile -fno-strict-aliasing"
+$ testcase_name = "no_strict_aliasing_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-fno-strict-aliasing"
@@ -405,7 +459,7 @@ $ return
 $!
 $!
 $wall_compile:
-$ write sys$output "Compile -Wall"
+$ testcase_name = "wall_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wall"
@@ -414,7 +468,7 @@ $ return
 $!
 $!
 $wextra_compile:
-$ write sys$output "Compile -Wextra"
+$ testcase_name = "wextra_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wextra"
@@ -423,7 +477,7 @@ $ return
 $!
 $!
 $wl_as_needed_compile:
-$ write sys$output "Compile -Wl,-as-needed"
+$ testcase_name = "wl_as_needed_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-as-needed"
@@ -432,9 +486,8 @@ $ return
 $!
 $!
 $wl_rpath_compile:
-$ write sys$output "Compile -Wl,-rpath"
+$ testcase_name = "wl_rpath_compile"
 $ test = test + 1
-$ lcl_fail = 0
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-rpath=."
 $ gosub compile_driver
@@ -442,7 +495,7 @@ $ return
 $!
 $!
 $wl_export_dyn_compile:
-$ write sys$output "Compile -Wl,-export-dynamic"
+$ testcase_name = "wl_export_dyn_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-export-dynamic"
@@ -451,9 +504,8 @@ $ return
 $!
 $!
 $wl_no_undef_compile:
-$ write sys$output "Compile -Wl,-no-undefined"
+$ testcase_name = "wl_no_undef_compile"
 $ test = test + 1
-$ lcl_fail = 0
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-no-undefined"
 $ gosub compile_driver
@@ -461,7 +513,7 @@ $ return
 $!
 $!
 $wl_version_compile:
-$ write sys$output "Compile -Wl,--version-script"
+$ testcase_name = "wl_version_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,--version-script"
@@ -470,7 +522,8 @@ $ return
 $!
 $!
 $wl_expect_unresolved:
-$ write sys$output "Compile -Wl,-expect_unresolved '-Wl,*'"
+$! write sys$output "Compile -Wl,-expect_unresolved '-Wl,*'"
+$ testcase_name = "wl_expect_unresolved"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-expect_unresolved '-Wl,*'"
@@ -479,7 +532,8 @@ $ return
 $!
 $!
 $wl_update_registry:
-$ write sys$output "Compile -Wl,-update_registry -Wl,../../so_locations"
+$! write sys$output "Compile -Wl,-update_registry -Wl,../../so_locations"
+$ testcase_name = "wl_update_registry"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-update_registry -Wl,../../so_locations"
@@ -488,7 +542,8 @@ $ return
 $!
 $!
 $wl_soname:
-$ write sys$output "Compile -Wl,-soname -Wl,libkrb5support.so.0"
+$! write sys$output "Compile -Wl,-soname -Wl,libkrb5support.so.0"
+$ testcase_name = "wl_soname"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-soname -Wl,libkrb5support.so.0"
@@ -497,7 +552,7 @@ $ return
 $!
 $!
 $wl_hidden:
-$ write sys$output "Compile -Wl,-hidden"
+$ testcase_name = "wl_hidden"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-hidden"
@@ -506,7 +561,8 @@ $ return
 $!
 $!
 $wl_input:
-$ write sys$output "Compile -Wl,-input,osf1.exports"
+$! write sys$output "Compile -Wl,-input,osf1.exports"
+$ testcase_name = "wl_input"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-input,osf1.exports"
@@ -515,7 +571,7 @@ $ return
 $!
 $!
 $pedantic_compile:
-$ write sys$output "Compile -pedantic"
+$ testcase_name = "pedantic_compile"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-pedantic"
@@ -524,22 +580,19 @@ $ return
 $!
 $!
 $quoted_define:
-$!set ver
-$ write sys$output "Compile quoted define"
+$ testcase_name = "quoted_define"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-DTEST_DEFINE=""foo bar"""
 $ expect_prog_out = "foo bar"
 $ gosub compile_driver
-$set nover
 $ return
 $!
 $!
 $!
 $quoted_define2:
-$ write sys$output "Compile quoted define2"
+$ testcase_name = "quoted_define2"
 $ test = test + 1
-$ lcl_fail = 0
 $ gosub create_test_hello_c
 $ cflags = "-DNDEBUG -DPy_BUILD_CORE -DABIFLAGS=""M"""
 $ expect_prog_out = "flags=M"
@@ -548,7 +601,7 @@ $ return
 $!
 $!
 $numeric_define:
-$ write sys$output "Compile numeric define"
+$ testcase_name = "numeric_define"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-DTest_NDEFINE=0x03500"
@@ -558,7 +611,7 @@ $ return
 $!
 $!
 $string_define:
-$ write sys$output "Compile string define"
+$ testcase_name = "string_define"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-DTEST_TXT_DEFINE=puts"
@@ -567,8 +620,167 @@ $ gosub compile_driver
 $ return
 $!
 $!
+$single_quoted_define:
+$! write sys$output "Compile single quoted define - Ticket 103"
+$ testcase_name = "single_quoted_define"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ cflags = "'-DTEST_TXT_DEFINE=int i=puts'"
+$ expect_prog_out = "Hello World!"
+$ gosub compile_driver
+$ return
+$!
+$cc_define_token_max:
+$! write sys$output "Define Long Lines bug -  GNV Ticket 101"
+$ testcase_name = "cc_define_token_max"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ dsffile = "a" + ".dsf"
+$! A long define/include string from building SAMBA/Kerberos that
+$! exposed bugs in the CC wrapper.
+$ longf = "'-D_REENTRANT' '-D_POSIX_PTHREAD_SEMANTICS' '-g'" + -
+  " '-DSTATIC_smbtorture_MODULES=torture_base_init,torture_raw_init," + -
+  "torture_smb2_init,torture_winbind_init,torture_libnetapi_init," + -
+  "torture_libsmbclient_init,"
+$ longf = longf + "torture_rpc_init,torture_drs_init,torture_rap_init," + -
+  "torture_dfs_init,torture_local_init,torture_krb5_init," + -
+  "torture_nbench_init,torture_unix_init,torture_ldap_init," + -
+  "torture_nbt_init,torture_net_init,torture_ntp_init,torture_vfs_init,"
+$ longf = longf + "torture_libcli_echo_init,NULL'" + -
+  " '-DSTATIC_smbtorture_MODULES_PROTO=_MODULE_PROTO(torture_base_init)" + -
+  "_MODULE_PROTO(torture_raw_init)_MODULE_PROTO(torture_smb2_init)" + -
+  "_MODULE_PROTO(torture_winbind_init)" + -
+  "_MODULE_PROTO(torture_libnetapi_init)" + -
+  "_MODULE_PROTO(torture_libsmbclient_init)" + -
+  "_MODULE_PROTO(torture_rpc_init)_MODULE_PROTO(torture_drs_init)" + -
+  "_MODULE_PROTO(torture_rap_init)_MODULE_PROTO(torture_dfs_init)" + -
+  "_MODULE_PROTO(torture_local_init)_MODULE_PROTO(torture_krb5_init)"
+$ longf = longf + "_MODULE_PROTO(torture_nbench_init)" + -
+  "_MODULE_PROTO(torture_unix_init)_MODULE_PROTO(torture_ldap_init)" + -
+  "_MODULE_PROTO(torture_nbt_init)_MODULE_PROTO(torture_net_init)" + -
+  "_MODULE_PROTO(torture_ntp_init)_MODULE_PROTO(torture_vfs_init)" + -
+  "_MODULE_PROTO(torture_libcli_echo_init)" + -
+  "extern void __smbtorture_dummy_module_proto(void)'" + -
+  " '-Idefault/source4/torture' '-I../source4/torture'" + -
+  " '-Idefault/include/public' '-I../include/public' '-Idefault/source4'" + -
+  " '-I../source4' '-Idefault/lib' '-I../lib' '-Idefault/source4/lib'"
+$ longf = longf + " '-I../source4/lib' '-Idefault/source4/include'" + -
+  " '-I../source4/include' '-Idefault/include' '-I../include' " + -
+  " '-Idefault/lib/replace' '-I../lib/replace' '-Idefault' '-I..'" + -
+  " '-Idefault/source3' '-I../source3' '-Idefault/source3/include'"
+$ longf = longf + " '-I../source3/include' '-Idefault/source3/lib'" + -
+  " '-I../source3/lib' '-Idefault/source4/heimdal/lib/com_err'" + -
+  " '-I../source4/heimdal/lib/com_err'" + -
+  " '-Idefault/source4/heimdal/lib/krb5' '-I../source4/heimdal/lib/krb5'" + -
+  " '-Idefault/source4/heimdal/lib/gssapi'"
+$ longf = longf + " '-I../source4/heimdal/lib/gssapi'" + -
+  " '-Idefault/source4/heimdal_build' '-I../source4/heimdal_build'" + -
+  " '-Idefault/bin/default/source4/heimdal/lib/asn1'" + -
+  " '-Idefault/source4/heimdal/lib/asn1' '-Idefault/lib/tdb/include'" + -
+  " '-I../lib/tdb/include'"
+$ longf = longf + " '-Idefault/lib/tevent' '-I../lib/tevent'" + -
+  " '-Idefault/lib/talloc' '-I../lib/talloc' '-Idefault/lib/param'" + -
+  " '-I../lib/param' '-Idefault/source4/heimdal/lib/hcrypto/libtommath'" + -
+  " '-I../source4/heimdal/lib/hcrypto/libtommath' '-Idefault/librpc'"
+$ longf = longf + " '-I../librpc' '-Idefault/libcli/ldap'" + -
+  " '-I../libcli/ldap' '-Idefault/third_party/popt'" + -
+  " '-I../third_party/popt' '-Idefault/source4/heimdal/lib/roken'" + -
+  " '-I../source4/heimdal/lib/roken' '-Idefault/source4/heimdal/include'" + -
+  " '-I../source4/heimdal/include' '-Idefault/source4/libnet'" + -
+  " '-I../source4/libnet' '-Idefault/source4/dsdb' '-I../source4/dsdb'" + -
+  " '-Idefault/source4/lib/http' '-I../source4/lib/http'" + -
+  " '-Idefault/source4/auth/ntlm' '-I../source4/auth/ntlm'"
+$ longf = longf + " '-Idefault/lib/torture' '-I../lib/torture'" + -
+  " '-Idefault/source4/librpc' '-I../source4/librpc'" + -
+  " '-Idefault/libcli/auth' '-I../libcli/auth' '-Idefault/lib/addns'" + -
+  " '-I../lib/addns' '-Idefault/auth/gensec' '-I../auth/gensec'" + -
+  " '-Idefault/auth/credentials' '-I../auth/credentials'"
+$ longf = longf + " '-Idefault/source4/auth' '-I../source4/auth'" + -
+  " '-Idefault/source4/heimdal/base' '-I../source4/heimdal/base'" + -
+  " '-Idefault/source4/libcli/ldap' '-I../source4/libcli/ldap'" + -
+  " '-Idefault/libcli/registry' '-I../libcli/registry'"
+$ longf = longf + " '-Idefault/lib/krb5_wrap' '-I../lib/krb5_wrap'" + -
+  " '-Idefault/libcli/util' '-I../libcli/util'" + -
+  " '-Idefault/source4/winbind' '-I../source4/winbind'" + -
+  " '-Idefault/source4/auth/kerberos' '-I../source4/auth/kerberos'" + -
+  " '-Idefault/source4/libcli/rap' '-I../source4/libcli/rap'"
+$ longf = longf + " '-Idefault/source4/libcli' '-I../source4/libcli'" + -
+  " '-Idefault/lib/socket' '-I../lib/socket' '-Idefault/source4/param'" + -
+  " '-I../source4/param' '-Idefault/lib/util/charset'" + -
+  " '-I../lib/util/charset' '-Idefault/source4/lib/events'"
+$ longf = longf + " '-I../source4/lib/events' '-Idefault/lib/ldb'" + -
+  " '-I../lib/ldb' '-Idefault/source3/lib/poll_funcs'" + -
+  " '-I../source3/lib/poll_funcs' '-Idefault/lib/tdb' '-I../lib/tdb'" + -
+  " '-Idefault/lib/async_req' '-I../lib/async_req'" + -
+  " '-Idefault/source4/auth/gensec'"
+$! These values not used as it exceeds what this DCL harness can deal
+$! with in a symbol.  I have left this here in case we need to extend
+$! the test harness to handle a larger string.
+$ longfx = longf + " '-I../source4/auth/gensec' '-Idefault/libcli/netlogon'" + -
+  " '-I../libcli/netlogon' '-Idefault/nsswitch/libwbclient'" + -
+  " '-I../nsswitch/libwbclient' '-Idefault/lib/ldb-samba' " + -
+  " '-I../lib/ldb-samba' '-Idefault/source4/heimdal/lib/asn1'"
+$ longfx = longf + " '-I../source4/heimdal/lib/asn1'" + -
+  " '-Idefault/source4/heimdal/lib/hcrypto'" + -
+  " '-I../source4/heimdal/lib/hcrypto' '-Idefault/source4/heimdal/lib'" + -
+  " '-I../source4/heimdal/lib' '-Idefault/python' '-I../python'" + -
+  " '-Idefault/auth/kerberos' '-I../auth/kerberos'"
+$ longfx = " '-Idefault/libcli/nbt' '-I../libcli/nbt'" + -
+  " '-Idefault/source4/heimdal/lib/hx509' '-I../source4/heimdal/lib/hx509'" + -
+  " '-Idefault/lib/dbwrap' '-I../lib/dbwrap'" + -
+  " '-Idefault/source4/lib/socket' '-I../source4/lib/socket'" + -
+  " '-Idefault/source4/lib/samba3' '-I../source4/lib/samba3'" + -
+  " '-Idefault/lib/tdr' '-I../lib/tdr' '-Idefault/source4/cluster'" + -
+  " '-I../source4/cluster' '-Idefault/source3/lib/pthreadpool'" + -
+  " '-I../source3/lib/pthreadpool' '-Idefault/libcli/security'" + -
+  " '-I../libcli/security' '-Idefault/nsswitch'"
+$ longfx = longfx + " '-I../nsswitch' '-Idefault/auth/ntlmssp'" + -
+  " '-I../auth/ntlmssp' '-Idefault/lib/ldb/include'" + -
+  " '-I../lib/ldb/include' '-Idefault/libcli/drsuapi'" + -
+  " '-I../libcli/drsuapi' '-Idefault/lib/tsocket'" + -
+  " '-I../lib/tsocket' '-Idefault/source4/heimdal/lib/wind'"
+$ longfx = longfx + " '-I../source4/heimdal/lib/wind'" + -
+  " '-Idefault/source4/lib/cmdline' '-I../source4/lib/cmdline'" + -
+  " '-Idefault/source4/lib/tls' '-I../source4/lib/tls'" + -
+  " '-Idefault/source4/heimdal/lib/gssapi/gssapi'" + -
+  " '-I../source4/heimdal/lib/gssapi/gssapi'" + -
+  " '-Idefault/source4/heimdal/lib/gssapi/spnego'" + -
+  " '-I../source4/heimdal/lib/gssapi/spnego'" + -
+  " '-Idefault/source4/heimdal/lib/gssapi/krb5'" + -
+  " '-I../source4/heimdal/lib/gssapi/krb5'" + -
+  " '-Idefault/source4/heimdal/lib/gssapi/mech'"
+$ longfx = longfx + " '-I../source4/heimdal/lib/gssapi/mech'" + -
+  " '-Idefault/libds/common' '-I../libds/common'" + -
+  " '-Idefault/source4/libcli/smb2' '-I../source4/libcli/smb2'" + -
+  " '-Idefault/source4/lib/messaging' '-I../source4/lib/messaging'" + -
+  " '-Idefault/source3/librpc' '-I../source3/librpc'"
+$ longfx = longfx + " '-Idefault/source4/lib/registry'" + -
+  " '-I../source4/lib/registry' '-Idefault/libcli/cldap'" + -
+  " '-I../libcli/cldap' '-Idefault/auth' '-I../auth'" + -
+  " '-Idefault/libcli/smb' '-I../libcli/smb'" + -
+  " '-Idefault/source4/libcli/wbclient' '-I../source4/libcli/wbclient'"
+$ longfx = longfx + " '-Idefault/dynconfig' '-I../dynconfig'" + -
+  " '-Idefault/source3/param' '-I../source3/param'" + -
+  " '-Idefault/lib/compression' '-I../lib/compression'" + -
+  " '-Idefault/source3/lib/unix_msg' '-I../source3/lib/unix_msg'" + -
+  " '-Idefault/lib/crypto'"
+$ longfx = longfx + " '-I../lib/crypto' '-Idefault/third_party/zlib'" + -
+  " '-I../third_party/zlib' '-Idefault/libcli/smbreadline'" + -
+  " '-I../libcli/smbreadline' '-Idefault/lib/smbconf'" + -
+  " '-I../lib/smbconf' '-Idefault/libcli/samsync'" + -
+  " '-I../libcli/samsync' '-Idefault/libcli/lsarpc'"
+$ longfx = longfx + "'-I../libcli/lsarpc' '-Idefault/source4/lib/stream'" + -
+  " '-I../source4/lib/stream' '-I/usr/local/include' '-D_SAMBA_BUILD_=4'" + -
+  " '-DHAVE_CONFIG_H=1' '-D_GNU_SOURCE=1' '-D_XOPEN_SOURCE_EXTENDED=1'"
+$ cflags = longf + " -DTEST_TXT_DEFINE=puts"
+$ expect_prog_out = "Hello World!"
+$ gosub compile_driver
+$ return
+$!
+$!
 $ld_auto_opt_file:
-$ write sys$output "LD with gnv$<xxx>.opt file"
+$! write sys$output "LD with gnv$<xxx>.opt file"
+$ testcase_name = "ld_auto_opt_file"
 $ test = test + 1
 $ gosub create_hello_sub_c
 $ cc hello_sub
@@ -590,12 +802,36 @@ $ if f$search(dfile) .nes. "" then delete 'dfile';*
 $ return
 $!
 $!
+$ld_link_map:
+$ testcase_name = "ld_link_map"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ link := link
+$ options = "GNV_LINK_MAP=1"
+$ expect_link_map = 1
+$ efile = "test_hello"
+$ cflags = "-o test_hello"
+$ gosub compile_driver
+$ delete/symbol/local link
+$ return
+$!
+$!
+$cc_first_module_dir:
+$ testcase_name = "cc_first_module_dir"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ options = "GNV_CC_FIRST_INCLUDE=."
+$ gosub compile_driver
+$ return
+$!
+$!
 $missing_objects:
-$ write sys$output "Compile missing objects"
+$ testcase_name = "missing_objects"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ more_files = "missing.o"
 $ expect_uf = 1
+$ no_efile = 1
 $ cflags = ""
 $ expect_cc_status = %x35a011
 $ out_file = "test_cc_prog.out"
@@ -603,11 +839,12 @@ $ gosub compile_driver
 $ return
 $!
 $missing_shared_images:
-$ write sys$output "Compile missing shared images"
+$ testcase_name = "missing_shared_images"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ more_files = "missing.so"
 $ expect_uf = 1
+$ no_efile = 1
 $ cflags = ""
 $ expect_cc_status = %x35a011
 $ cc_out_file = "test_cc.out"
@@ -615,11 +852,12 @@ $ gosub compile_driver
 $ return
 $!
 $missing_library:
-$ write sys$output "Compile missing library"
+$ testcase_name = "missing_library"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ more_files = "missing.a"
 $ expect_uf = 1
+$ no_efile = 1
 $ cflags = ""
 $ expect_cc_status = %x35a011
 $ gosub compile_driver
@@ -627,10 +865,8 @@ $ return
 $!
 $!
 $cc_command_file:
-$!set ver
-$ write sys$output "Compile cc_command_file"
+$ testcase_name = "cc_command_file"
 $ test = test + 1
-$ lcl_fail = 0
 $ gosub create_test_hello_c
 $ efile = "test_hello.o"
 $ cflags = "-o test_hello.o"
@@ -643,12 +879,11 @@ $ write sys$output "test gnv$test_hello_cc.com"
 $EOD
 $ gosub compile_driver
 $ if f$search(cc_cmd_file) .nes. "" then delete 'cc_cmd_file';*
-$set nover
 $ return
 $!
 $!
 $ld_gnv_shared_logical:
-$ write sys$output "Compile ld gnv_shared_logical"
+$ testcase_name = "ld_gnv_shared_logical"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_hello.exe"
@@ -656,20 +891,22 @@ $ cc/object=test_hello_shr.o 'cfile'
 $ link/share=test_hello_shr.exe test_hello_shr.o
 $ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
 $ cflags = "-o test_hello.exe -ltest_hello_shr"
+$ lstfile = "sys$disk:[]" + file + ".lis"
+$ if f$search(lstfile) .nes. "" then delete 'lstfile';*
 $ gosub compile_driver
-$ obj_file = file + "_shr.o"
+$ obj_file = "sys$disk:[]" + file + "_shr.o"
 $ if f$search(obj_file) .nes. "" then delete 'obj_file';*
-$ exe_shr1 = file + "_shr.exe"
+$ exe_shr1 = "sys$disk:[]" + file + "_shr.exe"
 $ if f$search(exe_shr1) .nes. "" then delete 'exe_shr1';*
-$ map_shr1 = file + "_shr.map"
+$ map_shr1 = "sys$disk:[]" + file + "_shr.map"
 $ if f$search(map_shr1) .nes. "" then delete 'map_shr1';*
-$ dsf_shr1 = file + "_.dsf"
+$ dsf_shr1 = "sys$disk:[]" + file + "_shr.dsf"
 $ if f$search(dsf_shr1) .nes. "" then delete 'dsf_shr1';*
 $ deassign gnv$libtest_hello_shr
 $ return
 $!
 $ld_gnv_shared_logical2:
-$ write sys$output "Compile ld gnv_shared_logical2"
+$ testcase_name = "ld_gnv_shared_logical2"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ efile = "test_hello.exe"
@@ -677,14 +914,16 @@ $ cc/object=test_hello_shr.o 'cfile'
 $ link/share=test_hello_shr.exe test_hello_shr.o
 $ define gnv$libtest_hello_shr sys$disk:[]test_hello_shr.exe
 $ cflags = "-o test_hello.exe libtest_hello_shr.a"
+$ lstfile = "sys$disk:[]" + file + ".lis"
+$ if f$search(lstfile) .nes. "" then delete 'lstfile';*
 $ gosub compile_driver
-$ obj_file = file + "_shr.o"
+$ obj_file = "sys$disk:[]" + file + "_shr.o"
 $ if f$search(obj_file) .nes. "" then delete 'obj_file';*
-$ exe_shr1 = file + "_shr.exe"
+$ exe_shr1 = "sys$disk:[]" + file + "_shr.exe"
 $ if f$search(exe_shr1) .nes. "" then delete 'exe_shr1';*
-$ map_shr1 = file + "_shr.map"
+$ map_shr1 = "sys$disk:[]" + file + "_shr.map"
 $ if f$search(map_shr1) .nes. "" then delete 'map_shr1';*
-$ dsf_shr1 = file + "_.dsf"
+$ dsf_shr1 = "sys$disk:[]" + file + "_shr.dsf"
 $ if f$search(dsf_shr1) .nes. "" then delete 'dsf_shr1';*
 $ deassign gnv$libtest_hello_shr
 $ return
@@ -692,6 +931,10 @@ $!
 $! Generic Compiler driver
 $!-------------------------
 $compile_driver:
+$ write sys$output "''testcase_name'"
+$ write junit "   <testcase name=""''testcase_name'"""
+$ write junit "    classname=""ld_tools.test"">"
+$ gosub directory_before
 $! on warning then set ver
 $ if f$type(noexe) .eqs. "" then noexe = 0
 $ cmd_symbol = test_cc_cmd
@@ -700,7 +943,9 @@ $ if cflags .nes. "" then cmd_symbol = cmd_symbol + " " + cflags
 $ if unix_c_file .nes. "" then cmd_symbol = cmd_symbol  + " " + unix_c_file
 $ if more_files .nes. "" then cmd_symbol = cmd_symbol + " " + more_files
 $ cmd_symbol = f$edit(cmd_symbol, "trim")
-$ write sys$output "  command: """, cmd_symbol, """"
+$ cmd_symbol_trunc = f$extract(0, 80, cmd_symbol)
+$! show symbol cmd_symbol
+$ write sys$output "  command: """, cmd_symbol_trunc, """"
 $ if cfile .eqs. "-"
 $ then
 $   ! Can't use cc_out_file here for now.
@@ -709,6 +954,7 @@ $   simple_c = "int main(int argc, char **argv) {return 0;}"
 $   pipe write sys$output simple_c -
 | execv 'test_cc' cmd_symbol
 $ else
+$   if arch_code .nes. "V" then set process/parse=traditional
 $   if cc_out_file .nes. "" then define/user sys$output 'cc_out_file'
 $   if options .nes. ""
 $   then
@@ -718,18 +964,34 @@ $       execv 'test_cc' cmd_symbol
 $   endif
 $ endif
 $ cc_status = '$status' .and. (.not. %x10000000)
+$! type 'lstfile'
+$ if arch_code .nes. "V" then set process/parse=extended
+$ gnv_temp_list_file = f$search("gnv$cc_stdin_*.lis")
+$ if gnv_temp_list_file .nes. ""
+$ then
+$   delete 'gnv_temp_list_file'
+$ endif
 $ gnv_temp_file = f$search("gnv$cc_stdin_*.*")
 $ if gnv_temp_file .nes. ""
 $ then
-$   write sys$output "** ''gnv_temp_file' temp file left behind."
-$   lcl_fail = lcl_fail + 1
+$   fail_type = "cleanup"
+$   fail_msg = "''gnv_temp_file' temp file left behind"
+$   gosub report_failure
 $   dir gnv$cc_stdin*.*
 $   del gnv$cc_stdin_*.*;*
 $ endif
 $ if cc_status .ne. expect_cc_status
 $ then
-$   write sys$output "  ** CC status ''cc_status' is not ''expect_cc_status'!"
-$   lcl_fail = lcl_fail + 1
+$   fail_type = "compile"
+$   fail_msg = "CC status ''cc_status' is not ''expect_cc_status'!"
+$   gosub report_failure
+$   type 'cc_out_file'
+$ endif
+$ if f$search("*.c_defines") .nes. ""
+$ then
+$   fail_type = "compile"
+$   fail_msg = "Found leftover *.c_defines file!"
+$   gosub report_failure
 $ endif
 $ if f$search(lstfile) .nes. "" .and. search_listing .nes. ""
 $ then
@@ -740,8 +1002,9 @@ $   severity = '$severity'
 $   set message'old_msg'
 $   if severity .ne. 1
 $   then
-$      write sys$output "  ** Did not find ''search_listing' in listing."
-$      lcl_fail = lcl_fail + 1
+$      fail_type = "compile"
+$      fail_msg = "Did not find ''search_listing' in listing."
+$      gosub report_failure
 $   endif
 $ endif
 $ if cc_out_file .nes. ""
@@ -761,9 +1024,9 @@ $       if expect_cc_out .nes. ""
 $       then
 $           if f$locate(expect_cc_out, line_in) .ne. 0
 $           then
-$               write sys$output -
-                    "  ** ''expect_cc_prog_out' not found in output."
-$               lcl_fail = lcl_fail + 1
+$               fail_type = "compile"
+$               fail_msg = "''expect_cc_prog_out' not found in output"
+$               gosub report_failure
 $               type 'cc_out_file'
 $           endif
 $       endif
@@ -771,8 +1034,9 @@ $       if .not. expect_uf
 $       then
 $           if f$locate("Unrecognized file", line_in) .lt. f$length(line_in)
 $           then
-$               write sys$output "  ** Unrecognized file seen in output."
-$               lcl_fail = lcl_fail + 1
+$               fail_type = "compile"
+$               fail_msg = "Unrecognized file seen in output"
+$               gosub report_failure
 $               type 'cc_out_file'
 $           endif
 $       endif
@@ -780,8 +1044,9 @@ $       if .not. expect_usw
 $       then
 $           if f$locate("Unrecognized switch", line_in) .lt. f$length(line_in)
 $           then
-$               write sys$output "  ** Unrecognized switch seen in output."
-$               lcl_fail = lcl_fail + 1
+$               fail_type = "compile"
+$               fail_msg = "Unrecognized switch seen in output"
+$               gosub report_failure
 $               type 'cc_out_file'
 $           endif
 $       endif
@@ -789,15 +1054,18 @@ $       if .not. expect_uopt
 $       then
 $           if f$locate("unrecognized option", line_in) .lt. f$length(line_in)
 $           then
-$               write sys$output "  ** Unrecognized option seen in output."
-$               lcl_fail = lcl_fail + 1
+$               fail_type = "compile"
+$               fail_msg = "Unrecognized option seen in output"
+$               gosub report_failure
 $               type 'cc_out_file'
 $           endif
 $       endif
+$       if lcl_fail .gt. 1 then type 'cc_out_file'
 $       delete 'cc_out_file';*
 $   else
-$       write sys$output "  ** Output file not created"
-$       lcl_fail = lcl_fail + 1
+$       fail_type = "compile"
+$       fail_msg = "Output file not created"
+$       gosub report_failure
 $   endif
 $ endif
 $ unix_status = 0
@@ -809,8 +1077,9 @@ $ if f$search(efile) .eqs. ""
 $ then
 $    if unix_status .eq. 0 .and. no_efile .eq. 0
 $    then
-$        write sys$output "  ** Executable not produced!"
-$        lcl_fail = lcl_fail + 1
+$       fail_type = "link"
+$       fail_msg = "Executable not produced"
+$       gosub report_failure
 $    endif
 $ else
 $   if noexe .eq. 0
@@ -821,11 +1090,13 @@ $       exe_file = f$parse(efile, "sys$disk:[]")
 $       mcr 'exe_file'
 $exe_fatal:
 $       prog_status = '$status'
+$       set noon
 $       if prog_status .nes. expect_prog_status
 $       then
-$           write sys$output -
-   "  ** Program status ''proj_status' is not ''expect_prog_status'!"
-$           lcl_fail = lcl_fail + 1
+$           fail_type = "link"
+$           fail_msg = -
+                  "Program status ''prog_status' is not ''expect_prog_status'"
+$           gosub report_failure
 $       endif
 $       if out_file .nes. ""
 $       then
@@ -838,21 +1109,30 @@ $read_xx2:
 $               close xx
 $               if f$locate(expect_prog_out, line_in) .ne. 0
 $               then
-$                write sys$output "  ** ''expect_prog_out' not found in output"
-$                  lcl_fail = lcl_fail + 1
+$                  fail_type = "link"
+$                  fail_msg = "''expect_prog_out' not found in output"
+$                  gosub report_failure
 $                  write sys$output "  ** Got -''line_in'-"
 $               endif
 $               delete 'out_file';*
 $           else
-$               write sys$output "  ** Output file not created"
-$               lcl_fail = lcl_fail + 1
+$               fail_type = "link"
+$               fail_msg = "Output file not created"
+$               gosub report_failure
 $           endif
+$       endif
+$       if expect_link_map .and. f$search(mapfile) .eqs. ""
+$       then
+$           fail_type = "link"
+$           fail_msg = "Map file not created"
+$           gosub report_failure
 $       endif
 $   endif
 $   if no_efile
 $   then
-$       write sys$output "Object produced when none expected"
-$       lcl_fail = lcl_fail + 1
+$       fail_type = "compile"
+$       fail_msg = "Object produced when none expected"
+$       gosub report_failure
 $   endif
 $   delete 'efile';*
 $ endif
@@ -860,12 +1140,28 @@ $ if f$search(ofile) .nes. "" then delete 'ofile';*
 $ if f$search(lstfile) .nes. "" then delete 'lstfile';*
 $ if f$search(mapfile) .nes. "" then delete 'mapfile';*
 $ if f$search(dsffile) .nes. "" then delete 'dsffile';*
-$
+$ gosub directory_after
 $ if lcl_fail .ne. 0 then fail = fail + 1
+$ write junit "   </testcase>"
 $ set nover
 $ ! cleanup
 $ gosub test_clean_up
 $ gosub clean_params
+$ return
+$!
+$report_failure:
+$ write sys$output "  ** ''fail_msg', type: ''fail_type'"
+$ write junit "      <failure message=""''fail_msg'"" type=""''fail_type'"" >"
+$ write junit "      </failure>
+$ lcl_fail = lcl_fail + 1
+$ return
+$!
+$skipped_test_driver:
+$ write sys$output "Skipping test ''testcase_name' reason: ''skip_reason'."
+$ write junit "   <testcase name=""''testcase_name'"""
+$ write junit "    classname=""ld_tools.test"">"
+$ write junit "      <skipped/>"
+$ write junit "   </testcase>"
 $ return
 $!
 $clean_params:
@@ -890,16 +1186,67 @@ $ efile = "a.out"
 $ cflags = ""
 $ options = ""
 $ expect_cc_out = ""
+$ expect_link_map = 0
 $ noexe = 0
 $ no_efile = 0
 $ expect_prog_out = "Hello World"
 $ search_listing = ""
+$ if f$search("*.c_defines") .nes. "" then delete *.c_defines;*
 $ return
 $!
 $test_clean_up:
 $ noexe = 1
 $ if f$search(cfile) .nes. "" then delete 'cfile';
 $ return
+$!
+$!
+$!
+$directory_before:
+$!
+$ if f$search("sys$disk:test_ld_before.txt") .nes. ""
+$ then
+$   delete sys$disk:test_ld_before.txt;*
+$ endif
+$ if f$search("sys$disk:test_ld_after.txt") .eqs. ""
+$ then
+$   ! Add a file so that the directory compare matches
+$   create sys$disk:test_ld_after.txt
+$ endif
+$ directory := directory
+$ directory/out=sys$disk:test_ld_before.txt sys$disk:[...];
+$ return
+$!
+$directory_after:
+$!
+$ if f$search("sys$disk:test_ld_after.txt") .nes. ""
+$ then
+$   delete sys$disk:test_ld_after.txt;*
+$ endif
+$ directory := directory
+$ directory/out=sys$disk:test_ld_after.txt sys$disk:[...];
+$!
+$ diff := diff
+$ define/user sys$output nla0:
+$ diff sys$disk:test_ld_before.txt sys$disk:test_ld_after.txt
+$ diff_status = $severity
+$ if diff_status .ne. 1
+$ then
+$   fail_type = "cleanup"
+$   fail_msg = "Directory contents change after test."
+$   gosub report_failure
+$   diff sys$disk:test_ld_before.txt sys$disk:test_ld_after.txt
+$ endif
+$!
+$ if f$search("sys$disk:test_ld_before.txt") .nes. ""
+$ then
+$   delete sys$disk:test_ld_before.txt;*
+$ endif
+$ if f$search("sys$disk:test_ld_after.txt") .nes. ""
+$ then
+$   delete sys$disk:test_ld_after.txt;*
+$ endif
+$ return
+$!
 $!
 $! Create a test file
 $create_test_hello_c:
@@ -927,8 +1274,10 @@ int main(int argc, char **argv) {
     TEST_TXT_DEFINE("Hello World!");
 #else
 # if !defined(TEST_DEFINE) && !defined(Test_NDEFINE) && !defined(NDEBUG)
-    puts("Hello World!");
-    return 0;
+#   ifndef TEST_DEFINE2
+      puts("Hello World!");
+      return 0;
+#   endif
 # endif
 #endif
 }

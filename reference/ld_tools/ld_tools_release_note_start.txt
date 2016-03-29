@@ -281,6 +281,37 @@ Some examples:
 
 Fixes and enhancements:
 
+** Version 3.0.5
+
+*  For Alpha and IA64 versions that support it, the dcl settings
+   of SET PROC/PARSE=EXTENDED and SET PROC/SYMBOL=EXTENDED are set.
+   This feature has not been testeded before OpenVMS 8.3 at this time.
+   GNV Ticket: https://sourceforge.net/p/gnv/bugs/101/
+
+*  The test script now produces a test_results.xml file in JUnit format
+   for automated test reporting.
+
+*  Handling quoted arguments from Bash or other C programs that use
+   the exec*() calls has been made more robust.  Running this tool from
+   DCL or LIB$SPAWN may result in some quoted arguments not being handled
+   correctly because the some of quotes are stripped off.
+   GNV Ticket: https://sourceforge.net/p/gnv/bugs/103/
+
+*  The GNV_OPT_DIR help documentation is now displayed for all aliases
+   for the LD wrapper.  Previously it was only documented for the "ld"
+   command.  GNV Ticket: https://sourceforge.net/p/gnv/bugs/102/
+
+*  Temporary *.c_defines files are now deleted if created by the
+   compiler driver.
+
+*  The GNV_CC_MODULE_FIRST_DIR can specify an alternate location for the
+   gnv$<module>.<type>_first files for the C and CC file types.
+   GNV Ticket: https://sourceforge.net/p/gnv/feature-requests/4/
+
+*  The GNV_LINK_MAP when set to 1 will enable the linker to create a map
+   file based on the name of target executable.
+   GNV Ticket: https://sourceforge.net/p/gnv/feature-requests/3/
+
 ** Version 3.0.4
 
 *  The following logical names are now set in the child process so that
