@@ -33,7 +33,18 @@ $ test = 0
 $ test_count = 46
 $ pid = f$getjpi("", "pid")
 $!
-$ create sys$disk:[]test_output.xml/fdl="RECORD; FORMAT STREAM_LF;"
+$ temp_fdl = "sys$disk:[]stream_lf.fdl"
+$ if arch_code .nes. "V"
+$ then
+$  create sys$disk:[]test_output.xml/fdl="RECORD; FORMAT STREAM_LF;"
+$ else
+$  if f$search(temp_fdl) .nes. "" then delete 'temp_fdl';*
+$  create 'temp_fdl'
+RECORD
+	FORMAT		stream_lf
+$ continue
+$ create sys$disk:[]test_output.xml/fdl='temp_fdl'
+$ endif
 $ open/append junit sys$disk:[]test_output.xml
 $ write junit "<?xml version=""1.0"" encoding=""UTF-8""?>
 $ write junit "  <testsuite name=""ld_tools"""
@@ -56,14 +67,20 @@ $!---------------
 $ gosub simple_compile
 $ gosub compile_fsyntax_only
 $ gosub compile_root_log_dash_c_dash_o
-$ gosub compile_log_dash_c_dash_o
-$ gosub compile_stdin
 $ if arch_code .nes. "V"
 $ then
+$   gosub compile_log_dash_c_dash_o
+$   gosub compile_stdin
 $   gosub compile_dot_in_directory
 $   gosub compile_dot_in_name
 $ else
-$   skip_reason "OSS-5 support"
+$   skip_reason = "#logical name format not supported by VAX"
+$   testcase_name = "compile_log_dash_c_dash_o"
+$   gosub skipped_test_driver
+$   skip_reason = "#pragma include_directory not supported by DECC/VAX"
+$   testcase_name = "compile_stdin"
+$   gosub skipped_test_driver
+$   skip_reason = "OSS-5 support"
 $   testcase_name = "compile_dot_in_directory"
 $   gosub skipped_test_driver
 $   testcase_name = "compile_dot_in_name"
@@ -114,7 +131,7 @@ $ if arch_code .nes. "V"
 $ then
 $   gosub cc_define_token_max
 $ else
-$   skip_reason "DCL extended parse needed"
+$   skip_reason = "DCL extended parse needed"
 $   testcase_name = "cc_define_token_max"
 $   gosub skipped_test_driver
 $ endif
@@ -133,7 +150,7 @@ $   gosub missing_objects
 $   gosub missing_shared_images
 $   gosub missing_library
 $ else
-$   skip_reason "VAX not returning error status"
+$   skip_reason = "VAX not returning error status"
 $   testcase_name = "missing_objects"
 $   gosub skipped_test_driver
 $   testcase_name = "missing_shared_images"
@@ -166,6 +183,7 @@ $    write sys$output "''fail' tests failed!"
 $ else
 $    write sys$output "All tests passed!"
 $ endif
+$ if f$search(temp_fdl) .nes. "" then delete 'temp_fdl';*
 $!
 $!
 $exit

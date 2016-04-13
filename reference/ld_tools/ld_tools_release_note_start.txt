@@ -326,7 +326,7 @@ Fixes and enhancements:
    decc$filename_unix_no_version ENABLE
 
 *  The cc/c++ wrapper now supports "- " for source files from standard
-   input similar to GCC.
+   input similar to GCC.  This feature does not currently work on VAX.
 
 *  Fixed issue where string defines were always being quoted.  Now string
    defines are only quoted when originally quoted.
