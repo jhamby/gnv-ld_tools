@@ -431,6 +431,19 @@ Modification history:
 		  Eric Robertson of IQware.
 		* Replicate selected C feature settings to be logical
 		  name as they affect the C/C++ compilers.
+
+	67	John E. Malmberg
+		* Fix quoting again.
+		* Fix long line handling
+		* Turn on SET PROC/PARSE=EXTENDED and
+		  SET PROC/SYMBOL=EXTENDED on the child script.
+		* GNV_LD_QUIET_MODE suppresses unsupported messages.
+		* Delete the temporary *.c_defines file.
+		* GNV_CC_MODULE_FIRST directory can specify an
+		  alternate location for the gnv$<module>.<type>_first files.
+		* GNV_LINK_MAP causes a linker map with the same name
+		  as the executable.
+
 */
 
 #include <assert.h>
@@ -616,6 +629,7 @@ int gnv_link_auto_symvec_nodata;
 int gnv_link_auto_symvec_nodups;
 int gnv_link_no_undef_error;
 int gnv_cc_warn_info;
+int gnv_ld_quiet_mode;
 int gnv_cc_warn_info_all;
 int gnv_cc_no_posix_exit;
 int gnv_cc_main_posix_exit;
@@ -1389,7 +1403,10 @@ void output_help( void)
 	files have type .EXE.");
    }
    puts("\
-    GNV_OPT_DIR			option-directory\n\
+   GNV_LD_QUIET_MODE		{1, 0}\n\
+	When enabled, supress printing of no support and similar\n\
+	messages for ignored options.\n\
+   GNV_OPT_DIR			option-directory\n\
 	When set, this specifies the directory in UNIX format that a\n\
 	linker option file with the same name as the executable but\n\
 	optionally prefixed with gnv$ will be used if it exists.");
@@ -2160,7 +2177,9 @@ char *lookup_val(char *i_src, char *r_str)
 	    }
  	}
     }
-    errmsg("Ignoring unrecognized option %s", i_src);
+    if (!gnv_ld_quiet_mode) {
+	errmsg("Ignoring unrecognized option %s", i_src);
+    }
     return NULL;
 }
 
@@ -3326,6 +3345,7 @@ int main(int argc, char *argv[])
     gnv_crtl_sup	= enabled("GNV_CRTL_SUP");
     gnv_link_debug	= enabled("GNV_LINK_DEBUG");
     gnv_link_map	= enabled("GNV_LINK_MAP");
+    gnv_ld_quiet_mode   = enabled("GNV_LD_QUIET_MODE");
     gnv_cc_warn_info    = enabled("GNV_CC_WARN_INFO");
     gnv_cc_warn_info_all = enabled("GNV_CC_WARN_INFO_ALL");
     gnv_cc_no_posix_exit = enabled("GNV_CC_NO_POSIX_EXIT");
@@ -3534,7 +3554,9 @@ int main(int argc, char *argv[])
 		} else if (!strncmp(&command_line[j], "cxx", 3)) {
 		    j = j+3;
 		    force_src = force_cxx;
-		    errmsg("Deprecated, use -x c++ instead.");
+		    if (!gnv_ld_quiet_mode) {
+			errmsg("Deprecated, use -x c++ instead.");
+		    }
 		} else if (!strncmp(&command_line[j], "c", 1) &&
 			   ((command_line[j+1] == 0) ||
 			    (command_line[j+1] == ' '))) {
@@ -3817,10 +3839,13 @@ int main(int argc, char *argv[])
 	    str_ptr = cc_opt->str;
 
 	    if (!str_ptr) {
-		if (cc_opt->parse == X_val)
-		    errmsg("No support for switch -%s %s", curr_arg, value_ptr);
-		else
-		    errmsg("No support for switch -%s", curr_arg);
+		if (!gnv_ld_quiet_mode) {
+		    if (cc_opt->parse == X_val)
+			errmsg("No support for switch -%s %s",
+			       curr_arg, value_ptr);
+		    else
+			errmsg("No support for switch -%s", curr_arg);
+		}
 		continue;
 	    }
 
@@ -4034,8 +4059,11 @@ int main(int argc, char *argv[])
 				    exit(GNV_ERROR_STATUS);
 				}
 				else {
-				    errmsg("Warning: library \"%s\" not found",
-                                           value_ptr);
+				    if (!gnv_ld_quiet_mode) {
+					errmsg(
+					    "Warning: library \"%s\" not found",
+					    value_ptr);
+				    }
 				    continue;
 				}
 			    }

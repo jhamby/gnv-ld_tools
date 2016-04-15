@@ -312,6 +312,12 @@ Fixes and enhancements:
    file based on the name of target executable.
    GNV Ticket: https://sourceforge.net/p/gnv/feature-requests/3/
 
+*  The -z and --undefined linker options are now ignored.
+   GNV Ticket https://sourceforge.net/p/gnv/bugs/106/
+
+*  The GNV_LD_QUIET_MODE suppresses messages about requested features
+   that are not supported.
+
 ** Version 3.0.4
 
 *  The following logical names are now set in the child process so that
