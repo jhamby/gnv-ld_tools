@@ -30,7 +30,7 @@ $!
 $! Initialize counts.
 $ fail = 0
 $ test = 0
-$ test_count = 46
+$ test_count = 47
 $ pid = f$getjpi("", "pid")
 $!
 $ temp_fdl = "sys$disk:[]stream_lf.fdl"
@@ -116,6 +116,7 @@ $ gosub wl_update_registry
 $ gosub wl_soname
 $ gosub wl_hidden
 $ gosub wl_input
+$ gosub samba_options_1
 $ gosub pedantic_compile
 $!
 $! Quoted define
@@ -584,6 +585,14 @@ $ testcase_name = "wl_input"
 $ test = test + 1
 $ gosub create_test_hello_c
 $ cflags = "-Wl,-input,osf1.exports"
+$ gosub compile_driver
+$ return
+$!
+$samba_options_1:
+$ testcase_name = "samba_options1"
+$ test = test + 1
+$ gosub create_test_hello_c
+$ cflags = "-pie -Wl,-z,relro,-z,now -Wl,--as-needed"
 $ gosub compile_driver
 $ return
 $!
