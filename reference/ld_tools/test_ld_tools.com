@@ -8,12 +8,14 @@ $ then
 $   ! Acctual installed location
 $   test_cc = "gnv$gnu:[usr.bin]cc.exe"
 $   test_cc_cmd = "/usr/bin/cc"
+$   test_cpp_cmd = "/usr/bin/cpp"
 $   ld = "gnv$gnu:[usr.bin]ld.exe"
 $   ld_cmd = "/usr/bin/ld"
 $ else
 $   ! Staged location is preferred
 $   test_cc = "gnv$gnu:[bin]cc.exe"
 $   test_cc_cmd = "/bin/cc"
+$   test_cpp_cmd = "/bin/cpp"
 $   ld = "gnv$gnu:[bin]ld.exe"
 $   ld_cmd = "/bin/ld"
 $ endif
@@ -21,6 +23,7 @@ $ if p1 .eqs. "DEBUG"
 $ then
 $    test_cc = "sys$disk:[]gnv$debug-ld.exe"
 $    test_cc_cmd = "./cc"
+$    test_cpp_cmd = "./cpp"
 $ endif
 $ execv := $sys$disk:[]execv_symbol.exe
 $!
@@ -30,7 +33,7 @@ $!
 $! Initialize counts.
 $ fail = 0
 $ test = 0
-$ test_count = 47
+$ test_count = 49
 $ pid = f$getjpi("", "pid")
 $!
 $ temp_fdl = "sys$disk:[]stream_lf.fdl"
@@ -54,7 +57,7 @@ $gosub clean_params
 $!
 $! Start with testing the version
 $!--------------------------------
-$! goto first_fail
+$!goto first_fail
 $ gosub version_test
 $!
 $! Then multi-arch
@@ -136,6 +139,8 @@ $   skip_reason = "DCL extended parse needed"
 $   testcase_name = "cc_define_token_max"
 $   gosub skipped_test_driver
 $ endif
+$ gosub cc_multiple_src
+$ gosub cpp_cxx_default_opts
 $!
 $! gnv$xxx.* files and options
 $!-----------------------------
@@ -166,6 +171,8 @@ $!
 $! Special GNV shared logical
 $ gosub ld_gnv_shared_logical
 $ gosub ld_gnv_shared_logical2
+$ gosub cc_unknown_type1
+$ gosub cc_unknown_type2
 $!
 $!
 $! Sumarize the run
@@ -212,7 +219,7 @@ $ expect_cc_status = 1
 $ out_file = "sys$scratch:test_cc_version.out"
 $ efile = "a.out"
 $ cflags = "--print-multiarch"
-$ cmd = "/bin/ld"
+$ cmd = ld_cmd
 $ expect_cc_out = "unknown-vms-hp"
 $ if arch_code .eqs. "V" then expect_cc_out = "vax-vms-hp"
 $ if arch_code .eqs. "A" then expect_cc_out = "alpha-vms-hp"
@@ -225,7 +232,7 @@ $!
 $print_search_compile:
 $ testcase_name = "print_search_compile"
 $ test = test + 1
-$ cmd = "/bin/ld"
+$ cmd = ld_cmd
 $ efile = "a.out"
 $ cflags = "-print-search-dirs"
 $ expect_c_out = "install: "
@@ -804,6 +811,36 @@ $ expect_prog_out = "Hello World!"
 $ gosub compile_driver
 $ return
 $!
+$cc_multiple_src:
+$ testcase_name = "cc_multiple_src"
+$ ! cc -o calc calc.c calc-lex.c calc-main.c
+$ ! %link-f-opening calc-lex.o
+$ gosub create_test_hello_c
+$ gosub create_hello_sub_c
+$ cflags = "-o test_hello hello_sub.c"
+$ efile = "test_hello."
+$ gosub compile_driver
+$ dfile = "hello_sub.o"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "hello_sub.lis"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "hello_sub.c"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ return
+$!
+$cpp_cxx_default_opts:
+$ testcase_name = "cpp_cxx_default_opts"
+$ ! cpp cxxtest.cc
+$ ! %DCL-W-IVKEYW - unrecognized NOVAXC_KEYWORDS
+$ test = test + 1
+$ gosub create_test_hello_cc
+$ cmd = test_cpp_cmd
+$ noexe = 1
+$ no_efile = 1
+$ options = "GNV_CC_QUALIFIERS=/ACCEPT=NOVAXC_KEYWORDS"
+$ gosub compile_driver
+$ return
+$!
 $!
 $ld_auto_opt_file:
 $! write sys$output "LD with gnv$<xxx>.opt file"
@@ -955,6 +992,55 @@ $ if f$search(dsf_shr1) .nes. "" then delete 'dsf_shr1';*
 $ deassign gnv$libtest_hello_shr
 $ return
 $!
+$cc_unknown_type1:
+$ testcase_name = "cc_unknown_type1"
+$ test = test + 1
+$ gosub create_test_hello_s
+$ ! Unknown types with no helper file
+$ cmd = test_cc_cmd
+$ cflags = "-o test_hello.o -I. -Iinclude -DHAVE_CONFIG.H -c"
+$ expect_uf = 1
+$ noexe = 1
+$ no_efile = 1
+$ gosub compile_driver
+$return
+$!
+$cc_unknown_type2:
+$ testcase_name = "cc_unknown_type2"
+$ test = test + 1
+$ gosub create_test_hello_s
+$ ! Unknown types with a helper file
+$ ! CCAS = cc
+$ ! DEFS = "-DHAVE_CONFIG_H"
+$ ! DEFAULT_INCLUDES = "-I. -I$(srcdir)
+$ ! INCLUDES = ""
+$ ! AM_CPPFLAGS = "-I. -I$(top_srcdir)/include -Iinclude -I$(top_srcdir)/src"
+$ ! CPPFLAGS = ""
+$ ! AM_CASFLAGS = $(AM_CPPFLAGS)
+$ ! CASFLAGS = ""
+$ !CPPASCOMPILE = $(CCAS) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+$!        $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CCASFLAGS) $(CCASFLAGS)
+$!LTCPPASCOMPILE = $(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) \
+$!        $(LIBTOOLFLAGS) --mode=compile $(CCAS) $(DEFS) \
+$!        $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+$!        $(AM_CCASFLAGS) $(CCASFLAGS)
+$!
+$! $(AM_V_CPPAS)$(LTCPPASCOMPILE) -c -o $@ $<
+$ builder = "sys$disk:[]gnv$test_hello_o.com"
+$ create 'builder'
+$ open/append bxx 'builder'
+$ write bxx "$write sys$output " + -
+  """cc/obj=sys$disk:test_hello.o sys$disk:[]test_hello.s"""
+$ close bxx
+$ cmd = test_cc_cmd
+$ options = "GNV_EXT_BUILDER=1"
+$ cflags = "-o test_hello.o -I. -Iinclude -DHAVE_CONFIG.H -c"
+$ noexe = 1
+$ no_efile = 1
+$ gosub compile_driver
+$ if f$search(builder) .eqs. "" then delete 'builder';*
+$return
+$!
 $! Generic Compiler driver
 $!-------------------------
 $compile_driver:
@@ -964,7 +1050,7 @@ $ write junit "    classname=""ld_tools.test"">"
 $ gosub directory_before
 $! on warning then set ver
 $ if f$type(noexe) .eqs. "" then noexe = 0
-$ cmd_symbol = test_cc_cmd
+$ cmd_symbol = cmd
 $ unix_c_file = cfile - "^"
 $ if cflags .nes. "" then cmd_symbol = cmd_symbol + " " + cflags
 $ if unix_c_file .nes. "" then cmd_symbol = cmd_symbol  + " " + unix_c_file
@@ -1167,10 +1253,16 @@ $ if f$search(ofile) .nes. "" then delete 'ofile';*
 $ if f$search(lstfile) .nes. "" then delete 'lstfile';*
 $ if f$search(mapfile) .nes. "" then delete 'mapfile';*
 $ if f$search(dsffile) .nes. "" then delete 'dsffile';*
+$ if f$search("hello_sub.obj") .eqs. ""
+$ then
+$   extra_file = "hello_sub.o"
+$   if f$search(extra_file) .nes. "" then delete 'extra_file';*
+$   extra_file = "hello_sub.lis"
+$   if f$search(extra_file) .nes. "" then delete 'extra_file';*
+$ endif
 $ gosub directory_after
 $ if lcl_fail .ne. 0 then fail = fail + 1
 $ write junit "   </testcase>"
-$ set nover
 $ ! cleanup
 $ gosub test_clean_up
 $ gosub clean_params
@@ -1275,7 +1367,7 @@ $ endif
 $ return
 $!
 $!
-$! Create a test file
+$! Create a test c file
 $create_test_hello_c:
 $ cfile = file + ".c"
 $ if f$search(cfile) .nes. "" then delete 'cfile';
@@ -1320,6 +1412,51 @@ $ create 'tcfile'
 
 int hello_sub(const char * str) {
     puts(str);
+    return 0;
+}
+$ return
+$!
+$! Create a test cc file
+$create_test_hello_cc:
+$ cfile = file + ".cc"
+$ if f$search(cfile) .nes. "" then delete 'cfile';
+$ create 'cfile'
+#include <iostream.h>
+
+int main(int argc, char **argv) {
+#ifdef Test_NDEFINE
+    cout << Test_NDEFINE;
+    return 1;
+#endif
+#ifdef TEST_DEFINE
+    cout << TEST_DEFINE;
+    return 1;
+#endif
+#ifdef TEST_TXT_DEFINE
+    TEST_TXT_DEFINE << "Hello World!";
+#else
+# if !defined(TEST_DEFINE) && !defined(Test_NDEFINE) && !defined(NDEBUG)
+#   ifndef TEST_DEFINE2
+      cout << "Hello World!";
+      return 0;
+#   endif
+# endif
+#endif
+}
+$ return
+$!
+$!
+$!
+$!
+$! Create a test c file
+$create_test_hello_s:
+$ cfile = file + ".s"
+$ if f$search(cfile) .nes. "" then delete 'cfile';
+$ create 'cfile'
+#include <stdio.h>
+
+int main(int argc, char **argv) {
+    puts("Hello World!");
     return 0;
 }
 $ return

@@ -291,6 +291,10 @@ Fixes and enhancements:
 *  The test script now produces a test_results.xml file in JUnit format
    for automated test reporting.
 
+*  The handling of multiple input source modules has been fixed.  Previously
+   they were concatenated to produce a single object module.  Now they
+   are passed as a list to the compiler.
+
 *  Handling quoted arguments from Bash or other C programs that use
    the exec*() calls has been made more robust.  Running this tool from
    DCL or LIB$SPAWN may result in some quoted arguments not being handled
@@ -317,6 +321,11 @@ Fixes and enhancements:
 
 *  The GNV_LD_QUIET_MODE suppresses messages about requested features
    that are not supported.
+
+*  The GNV_EXT_BUILDER enables looking for a command file
+   gnv$<module>_<type>.com for building types like ".s" which the
+   CC/LD wrapper.  The <type> will match the object file name, not the
+   source.
 
 ** Version 3.0.4
 

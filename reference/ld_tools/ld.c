@@ -396,8 +396,11 @@ Modification history:
 		* --version working correctly.
 		* Missing library or shared images should not cause CPU loops.
 		* If -o path/foo is specified, then path/gnv$foo_*.com is
-		  where * is "cxx", "cc", or "link" is run if present
-		  before the action is run.
+		  where * is "cxx", "cc", "link" or the suffix of the
+		  specified object module is run if present
+		  before the action is run.  The suffix of the object module
+		  is used when the LD/CC/CXX wrapper does not recognize the
+		  source modules as objects or c/c++ source.
 		* Look for gnv$lib<foo> logical name over libfoo.a for "-l"
 		  option unless feature is disabled.  This allows the
 		  gnv$foo_link.com above to create a shared image with out
@@ -641,6 +644,7 @@ int gnv_cc_include_length_max;
 int gnv_cc_no_module_first;
 int gnv_cc_no_inc_primary;
 char * gnv_cc_module_first_dir;
+int gnv_ext_builder;
 char module_first[1024];
 char gnv_cc_stdin_file[1024];
 int gnv_ld_object_length_max;
@@ -672,6 +676,8 @@ char curdir[1024];
 int is_cxx = 0;
 int is_ld = 0;
 int is_cc = 0;
+typedef enum {compile_cc, compile_cxx, compile_ext_builder} compile_t;
+compile_t compile_type = compile_cc;
 int verbose = 0;
 
 char *command_line=NULL;
@@ -735,6 +741,7 @@ typedef struct arglist {
 
 ARGLIST_D( l_cfiles		, NULL		, 0, 0 );
 ARGLIST_D( l_cxxfiles		, NULL		, 0, 0 );
+ARGLIST_D( l_buildfiles		, NULL		, 0, 0 );
 ARGLIST_D( l_objfiles		, NULL		, 0, 0 );
 
 ARGLIST_D( l_compile		, NULL		, 0, 0 );
@@ -888,18 +895,18 @@ static int sys_crelnm
  */
  void generate_stdin_file(char *filename)
 {
-    FILE *outfile;
+    FILE *dash_fp;
     char linebuffer[32678];
 
     remove(filename);
-    outfile = fopen(filename, "w");
+    dash_fp = fopen(filename, "w");
 
     fgets(linebuffer, sizeof(linebuffer), stdin);
     while (!feof(stdin) ) {
-        fputs(linebuffer, outfile);
+        fputs(linebuffer, dash_fp);
         fgets(linebuffer, sizeof(linebuffer), stdin);
     }
-    fclose(outfile);
+    fclose(dash_fp);
 }
 
 
@@ -1387,9 +1394,6 @@ void output_help( void)
     GNV_LINK_MAP		{1, 0}\n\
 	When enabled, uses LINK/MAP=exefile.MAP.  The exefile is\n\
 	based on the image file being created.\n\
-    GNV_LINK_MAP		{1, 0}\n\
-	When enabled, uses LINK/MAP=exefile.MAP.  The exefile is\n\
-	based on the image file being created.\n\
     GNV_LINK_MISSING_LIB_ERROR	{1, 0}\n\
 	When enabled, cause a missing library file to be treated as\n\
 	an error. If not enabled, a missing library file is a warning.\n\
@@ -1403,6 +1407,17 @@ void output_help( void)
 	files have type .EXE.");
    }
    puts("\
+    GNV_EXT_BUILDER		(0, 1)\n\
+	When enabled, this specifies that when the -o option is specified,\n\
+	for unknown source file types for normal c or c++ compiling and\n\
+	linking, the LD/CC/CXX wrapper will look for a DCL command file\n\
+	to run instead of reporting unrecognized file.\n\
+	The DCL command file will be looked for in the same directory as\n\
+	the object file will be named gnv$<module>_<type>.com.\n\
+	No parameters are passed to this procedure.  For example:\n\
+	foo.s will use gnv$foo_o.com to build.\n\
+	If the DCL command file is not present, no action will be done\n\
+	and no message will be output\n\
    GNV_LD_QUIET_MODE		{1, 0}\n\
 	When enabled, supress printing of no support and similar\n\
 	messages for ignored options.\n\
@@ -2438,6 +2453,10 @@ void usage(const char *str, ...)
 }
 
 
+/* If an output file is specified, then look for a script with a name created
+ * from dirname(output) + "gnv$" + basename(output) + "_" + action + ".com"
+ * and run it.
+ */
 void do_outfile_cmdfile(FILE *fp, const char *action) {
     char * name;
     int name_len;
@@ -2469,7 +2488,11 @@ void do_outfile_cmdfile(FILE *fp, const char *action) {
     strncat(cmd_file, name, name_len);
     cmd_file[path_len + name_len] = 0;
     strcat(cmd_file, "_");
-    strcat(cmd_file, action);
+    if (action != NULL) {
+        strcat(cmd_file, action);
+    } else {
+        strcat(cmd_file, ext);
+    }
     strcat(cmd_file, ".com");
     acc_stat = access(cmd_file, F_OK);
     if (acc_stat == 0) {
@@ -2484,7 +2507,7 @@ void do_outfile_cmdfile(FILE *fp, const char *action) {
 **
 */
 
-void do_compile(FILE *fp, list_t files_list, int use_cxx)
+void do_compile(FILE *fp, list_t files_list, compile_t build_type)
 {
     int many_includes;
     list_t lptr;
@@ -2493,7 +2516,8 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
     const char *cxx = "cxx";
     const char *cc = "cc";
 
-    if (use_cxx) {
+    switch(build_type) {
+    case compile_cxx:
 	if (files_list == NULL) {
 	    /* Version */
 	    fprintf(fp, "$cxx := cxx\n");
@@ -2506,8 +2530,8 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
 	}
 	do_outfile_cmdfile(fp, cxx);
 	fprintf(fp, "$cxx -\n");
-    }
-    else {
+        break;
+    case compile_cc:
 	if (files_list == NULL) {
 	    /* Version */
 	    fprintf(fp, "$cc := cc\n");
@@ -2520,6 +2544,11 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
 	}
 	do_outfile_cmdfile(fp, cc);
 	fprintf(fp, "$cc -\n");
+        break;
+    case compile_ext_builder:
+        /* External Builder, no parameters, just a script */
+	do_outfile_cmdfile(fp, NULL);
+        return;
     }
 
     output_list(fp, &l_compile);
@@ -2681,7 +2710,7 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
 
     if (preprocess) {
 
-        if (!is_cxx && !use_cxx)
+        if (!is_cxx && !(compile_type == compile_cxx))
             fprintf(fp, "/stand=common -\n");
 
         sprintf(prep_file_name, "%si", cmd_proc_name_ptr); /* append an i */
@@ -2707,10 +2736,7 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
             } else if (outfile && !linkx) {
                 fprintf(fp, "/object=%s -\n", unix_to_vms(outfile, FALSE));
             } else {
-                fprintf(fp, "/object=%s -\n",
-                        unix_to_vms(basename(
-			    new_suffix3(files_list->str,
-					default_obj_suffix)), FALSE));
+                fprintf(fp, "/object=sys$disk:[]%s -\n", default_obj_suffix);
 	    }
         }
 
@@ -2757,7 +2783,7 @@ void do_compile(FILE *fp, list_t files_list, int use_cxx)
                 fprintf(fp, "%s", unix_to_vms(lptr->str, FALSE));
                 lptr = lptr->next;
                 if (lptr)
-                    fprintf(fp, "+-\n");
+                    fprintf(fp, ",-\n");
 	        else
                     fprintf(fp, "\n");
             }
@@ -3356,6 +3382,7 @@ int main(int argc, char *argv[])
 #else
     gnv_cc_no_use_std_stat = 1; /* It is not there to use */
 #endif
+    gnv_ext_builder = enabled("GNV_EXT_BUILDER");
     gnv_cxx_no_use_std_iostream = enabled("GNV_CXX_NO_STD_IOSTREAM");
     gnv_cc_sockaddr_len = enabled("GNV_CC_SOCKADDR_LEN");
     gnv_cc_module_first_dir = getenv("GNV_CC_MODULE_FIRST_DIR");
@@ -3376,7 +3403,7 @@ int main(int argc, char *argv[])
     gnv_link_qualifiers = getenv("GNV_LINK_QUALIFIERS");
     gnv_cxxlink_qualifiers = getenv("GNV_CXXLINK_QUALIFIERS");
     gnv_opt_dir         = getenv("GNV_OPT_DIR");
-
+    module_first[0] = 0;
 
     p = getenv("GNV_CC_DEFINE_LENGTH_MAX");
     gnv_cc_define_length_max = p ? atoi(p) : DEFAULT_DEFINE_LEN_MAX;
@@ -4210,10 +4237,15 @@ int main(int argc, char *argv[])
 
                 typ = filename_suffix_type(value_ptr, len);
 
+		if (force_src == force_none) {
+
+                }
+
                 if (typ == suffix_c || typ == suffix_cxx ||
                     force_src != force_none) {
                     char *bname;
 		    char *dname;
+		    int add_obj_list;
 
 		    if (!process_stdin) {
 			bname = basename(strdup(value_ptr));
@@ -4306,14 +4338,19 @@ int main(int argc, char *argv[])
 			free(bname);
 			bname = basename(strdup(gnv_cc_stdin_file));
 		    }
+
                     append_last(&l_objfiles,
                                 new_suffix3(bname, default_obj_suffix));
 		    free(dname);
 		    free(bname);
-                }
-		else {
-		    errmsg("Unrecognized file %s", value_ptr);
-		    free(value_ptr);
+                } else {
+		    char *lastdot;
+                    int use_ext=0;
+		    lastdot = strrchr(value_ptr, '.');
+		    if (!(outfile && gnv_ext_builder) && (lastdot != NULL)) {
+			errmsg("Unrecognized file %s", value_ptr);
+			free(value_ptr);
+		   }
 		}
             }
         }
@@ -4457,14 +4494,17 @@ int main(int argc, char *argv[])
 #endif
 
     if (version && !l_cxxfiles.list && !l_cfiles.list && !l_objfiles.list &&
-        (is_cxx || is_cc))
-        do_compile(cmd_proc, NULL, is_cxx);
-
+        (is_cxx || is_cc)) {
+        do_compile(cmd_proc, NULL, is_cxx ? compile_cxx : compile_cc);
+    }
     if (l_cfiles.list)
-        do_compile(cmd_proc, l_cfiles.list, FALSE);
+        do_compile(cmd_proc, l_cfiles.list, compile_cc);
 
     if (l_cxxfiles.list)
-        do_compile(cmd_proc, l_cxxfiles.list, TRUE);
+        do_compile(cmd_proc, l_cxxfiles.list, compile_cxx);
+
+    if (l_buildfiles.list)
+        do_compile(cmd_proc, l_buildfiles.list, compile_ext_builder);
 
     object_opt_name_ptr = NULL;
     if (linkx) {
