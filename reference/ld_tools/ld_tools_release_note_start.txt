@@ -294,6 +294,7 @@ Fixes and enhancements:
 *  The handling of multiple input source modules has been fixed.  Previously
    they were concatenated to produce a single object module.  Now they
    are passed as a list to the compiler.
+   GNV Ticket: https://sourceforge.net/p/gnv/bugs/107/
 
 *  Handling quoted arguments from Bash or other C programs that use
    the exec*() calls has been made more robust.  Running this tool from
