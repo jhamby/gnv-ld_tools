@@ -281,11 +281,21 @@ Some examples:
 
 Fixes and enhancements:
 
+** Version 3.0.6
+
+*  The link operation will now look for a gnv$link_options.opt file
+   if a module specific option file is not found.
+   GNV Ticket: https://sourceforge.net/p/gnv/bugs/125/
+
+*  A bug was found in ar_tools for handling multiple filenames that
+   translate to the form logname:filename.  The same bug was present
+   in ld_tools.  GNV Ticket: https://sourceforge.net/p/gnv/bugs/124/
+
 ** Version 3.0.5
 
 *  For Alpha and IA64 versions that support it, the dcl settings
    of SET PROC/PARSE=EXTENDED and SET PROC/SYMBOL=EXTENDED are set.
-   This feature has not been testeded before OpenVMS 8.3 at this time.
+   This feature has not been tested before OpenVMS 8.3 at this time.
    GNV Ticket: https://sourceforge.net/p/gnv/bugs/101/
 
 *  The test script now produces a test_results.xml file in JUnit format
@@ -294,7 +304,6 @@ Fixes and enhancements:
 *  The handling of multiple input source modules has been fixed.  Previously
    they were concatenated to produce a single object module.  Now they
    are passed as a list to the compiler.
-   GNV Ticket: https://sourceforge.net/p/gnv/bugs/107/
 
 *  Handling quoted arguments from Bash or other C programs that use
    the exec*() calls has been made more robust.  Running this tool from

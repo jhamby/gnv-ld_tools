@@ -33,7 +33,7 @@ $!
 $! Initialize counts.
 $ fail = 0
 $ test = 0
-$ test_count = 49
+$ test_count = 51
 $ pid = f$getjpi("", "pid")
 $!
 $ temp_fdl = "sys$disk:[]stream_lf.fdl"
@@ -49,7 +49,7 @@ $ continue
 $ create sys$disk:[]test_output.xml/fdl='temp_fdl'
 $ endif
 $ open/append junit sys$disk:[]test_output.xml
-$ write junit "<?xml version=""1.0"" encoding=""UTF-8""?>
+$ write junit "<?xml version=""1.0"" encoding=""UTF-8""?>"
 $ write junit "  <testsuite name=""ld_tools"""
 $ write junit "   tests=""''test_count'"">"
 $!
@@ -59,6 +59,7 @@ $! Start with testing the version
 $!--------------------------------
 $!goto first_fail
 $ gosub version_test
+$ gosub version_test1
 $!
 $! Then multi-arch
 $ gosub print_multiarch_test
@@ -208,6 +209,17 @@ $ cflags = "--version"
 $ expect_cc_out = "GNV ld"
 $ gosub version_test_driver
 $ return
+$!
+$version_test1:
+$ testcase_name = "version_test1"
+$ test = test + 1
+$ out_file = "sys$scratch:test_cc_version.out"
+$ efile = "a.out"
+$ cflags = "-version"
+$ expect_cc_out = "GNV ld"
+$ gosub version_test_driver
+$ return
+$!
 $!
 $! --print-multiarch test
 $!------------------------
@@ -851,6 +863,29 @@ $ cc hello_sub
 $ gosub create_test_hello_c
 $ efile = file
 $ create gnv$'file'.opt
+sys$disk:[]hello_sub.obj
+$ cflags = "-DTEST_TXT_DEFINE=hello_sub -o ''efile'"
+$ options = "GNV_OPT_DIR=."
+$ gosub compile_driver
+$ dfile = "hello_sub.obj"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "hello_sub.lis"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "hello_sub.c"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ dfile = "gnv$''file'.opt"
+$ if f$search(dfile) .nes. "" then delete 'dfile';*
+$ return
+$!
+$ld_auto_opt2_file:
+$! write sys$output "LD with gnv$link_options.opt file"
+$ testcase_name = "ld_auto_opt2_file"
+$ test = test + 1
+$ gosub create_hello_sub_c
+$ cc hello_sub
+$ gosub create_test_hello_c
+$ efile = file
+$ create gnv$link_options.opt
 sys$disk:[]hello_sub.obj
 $ cflags = "-DTEST_TXT_DEFINE=hello_sub -o ''efile'"
 $ options = "GNV_OPT_DIR=."

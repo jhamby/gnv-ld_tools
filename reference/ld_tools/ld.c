@@ -2806,17 +2806,23 @@ void add_special_opt_file(const char *execname)
     char *bname;
     const char *suf;
     char optname[1024];
+    int have_optname;
 
     if (!gnv_opt_dir)
         return;
 
+    have_optname = 0;
     bname = basename((char*)execname);
     sprintf(optname, "%s/%s%s", gnv_opt_dir,"gnv$", new_suffix3(bname, ".opt"));
 
-    if (file_exists(optname)) {
+    have_optname = file_exists(optname);
+    if (! have_optname) {
+        sprintf(optname, "%s/gnv$link_options.opt", gnv_opt_dir);
+        have_optname = file_exists(optname);
+    }
+    if (have_optname) {
         printf("Adding special opt file %s to link\n", optname);
         append_last(&l_optfiles, strdup(optname));
-
 	return;
     }
 
